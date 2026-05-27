@@ -1,4 +1,4 @@
-# Web — production (Next.js standalone, single builder stage avoids BuildKit snapshot errors)
+# Web — production (Next.js standalone)
 FROM node:20-alpine AS builder
 WORKDIR /app
 
@@ -7,11 +7,11 @@ RUN apk add --no-cache libc6-compat
 ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=2048
 
-COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci --ignore-scripts
+# Install deps first (npm install works without lockfile; npm ci fails if lock missing on VPS)
+COPY apps/web/package.json ./
+RUN npm install --ignore-scripts --legacy-peer-deps
 
 COPY apps/web/ .
 RUN npm run build
