@@ -7,7 +7,7 @@ Everything below is what **you** run on the VPS. Local prep is complete when thi
 ## What was done on your PC (already)
 
 - [x] Code pushed to https://github.com/kass2024/xander-ai-ide
-- [x] Production Docker + nginx configured for **parrotmoc.online**
+- [x] Production Docker + nginx configured for **xanderai.online**
 - [x] Guides: `VPS-PRODUCTION-FULL-GUIDE.md`, `DEPLOY-SERVER-QUICK.md`
 
 ---
@@ -39,7 +39,7 @@ Or on VPS: `cp .env.production.example .env.production` and edit manually.
 
 ### 3. Stripe webhook (after API is live)
 
-URL: `https://api.parrotmoc.online/billing/webhook`  
+URL: `https://api.xanderai.online/billing/webhook`  
 Then update `STRIPE_WEBHOOK_SECRET` in `.env.production` on VPS.
 
 ---
@@ -56,7 +56,7 @@ cd /opt && git clone https://github.com/kass2024/xander-ai-ide.git && cd xander-
 
 # 3. Env (if you did not scp server-deploy.env)
 cp .env.production.example .env.production
-nano .env.production   # passwords, keys, parrotmoc.online URLs
+nano .env.production   # passwords, keys, xanderai.online URLs
 
 # 4. Pull latest fix then deploy (if build fails, use script below)
 git pull origin main
@@ -71,10 +71,10 @@ chmod +x scripts/vps-docker-build.sh
 
 # 5. Wait & verify
 docker logs -f xander_backend
-curl -s http://api.parrotmoc.online/health
+curl -s http://api.xanderai.online/health
 ```
 
-Login: https://parrotmoc.online/auth/login with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+Login: https://xanderai.online/auth/login with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ### After first success
 

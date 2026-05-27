@@ -1,4 +1,4 @@
-# Full VPS production setup — parrotmoc.online
+# Full VPS production setup — xanderai.online
 
 Same stack as your **local machine**, but everything runs inside Docker on the server.
 
@@ -9,7 +9,7 @@ Same stack as your **local machine**, but everything runs inside Docker on the s
 | `cd apps/web && npm run dev` | `xander_web` container (Next.js) |
 | `DATABASE_URL=...@localhost:5432` | `DATABASE_URL=...@postgres:5432` (Docker network) |
 | `npx prisma migrate deploy` + `seed` | **Automatic** on backend container start |
-| Desktop `.exe` | Still on Windows; calls `https://api.parrotmoc.online` |
+| Desktop `.exe` | Still on Windows; calls `https://api.xanderai.online` |
 
 **Repo:** `https://github.com/kass2024/xander-ai-ide.git`
 
@@ -21,7 +21,7 @@ Same stack as your **local machine**, but everything runs inside Docker on the s
 
 - Linux VPS (Ubuntu 22.04/24.04), **2 GB RAM minimum**, **4 GB recommended** for first build
 - SSH access (`root` or `sudo` user)
-- Domain **parrotmoc.online** pointed to VPS IP
+- Domain **xanderai.online** pointed to VPS IP
 - Values from your local `apps/backend/.env` (OpenAI, Stripe, JWT, etc.)
 
 ### DNS records (at domain registrar)
@@ -35,8 +35,8 @@ Same stack as your **local machine**, but everything runs inside Docker on the s
 Wait 5–30 minutes, then check:
 
 ```bash
-ping parrotmoc.online
-ping api.parrotmoc.online
+ping xanderai.online
+ping api.xanderai.online
 ```
 
 ---
@@ -124,12 +124,12 @@ STRIPE_SECRET_KEY=...
 STRIPE_PUBLISHABLE_KEY=...
 STRIPE_WEBHOOK_SECRET=...      # create NEW webhook for production URL
 
-WEB_URL=https://parrotmoc.online
-NEXT_PUBLIC_API_URL=https://api.parrotmoc.online
+WEB_URL=https://xanderai.online
+NEXT_PUBLIC_API_URL=https://api.xanderai.online
 
 RUN_SEED=true                  # creates plans + admin on first deploy
 
-ADMIN_EMAIL=admin@parrotmoc.online
+ADMIN_EMAIL=admin@xanderai.online
 ADMIN_PASSWORD=YOUR_STRONG_ADMIN_PASSWORD
 
 AI_RATE_LIMIT_PER_MIN=60
@@ -146,7 +146,7 @@ openssl rand -base64 48
 
 Stripe Dashboard → Developers → Webhooks → Add endpoint:
 
-- **URL:** `https://api.parrotmoc.online/billing/webhook`
+- **URL:** `https://api.xanderai.online/billing/webhook`
 - **Events:** `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
 
 Copy `whsec_...` → `STRIPE_WEBHOOK_SECRET` in `.env.production`.
@@ -172,8 +172,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
    - `node dist/main.js` → API on port 3001
 4. **web** builds (with `NEXT_PUBLIC_API_URL`) → dashboard on port 3000
 5. **nginx** routes:
-   - `parrotmoc.online` → web
-   - `api.parrotmoc.online` → backend
+   - `xanderai.online` → web
+   - `api.xanderai.online` → backend
 
 ### Watch progress
 
@@ -189,7 +189,7 @@ Wait until backend log shows:
 ==> Running Prisma migrations...
 ==> Seeding database...
 Seeded plans: free, pro, team, enterprise
-Seeded admin user: admin@parrotmoc.online
+Seeded admin user: admin@xanderai.online
 ==> Starting NestJS...
 🚀 Backend API running on http://localhost:3001
 ```
@@ -201,7 +201,7 @@ Seeded admin user: admin@parrotmoc.online
 ### 6.1 Health check
 
 ```bash
-curl -s http://api.parrotmoc.online/health | jq .
+curl -s http://api.xanderai.online/health | jq .
 ```
 
 Expected:
@@ -237,7 +237,7 @@ docker exec -it xander_postgres psql -U postgres -d xander_ai_ide -c "SELECT slu
 
 ### 6.5 Test login (admin from seed)
 
-Open in browser: `http://parrotmoc.online/auth/login`
+Open in browser: `http://xanderai.online/auth/login`
 
 - Email: value of `ADMIN_EMAIL` in `.env.production`
 - Password: value of `ADMIN_PASSWORD`
@@ -248,9 +248,9 @@ Open in browser: `http://parrotmoc.online/auth/login`
 
 | Test | Command / URL |
 |------|----------------|
-| Web home | http://parrotmoc.online |
-| API health | http://api.parrotmoc.online/health |
-| Register | http://parrotmoc.online/auth/register |
+| Web home | http://xanderai.online |
+| API health | http://api.xanderai.online/health |
+| Register | http://xanderai.online/auth/register |
 
 ---
 
@@ -258,7 +258,7 @@ Open in browser: `http://parrotmoc.online/auth/login`
 
 ### Option A — Cloudflare (easiest)
 
-1. Add site `parrotmoc.online` to Cloudflare
+1. Add site `xanderai.online` to Cloudflare
 2. Point nameservers to Cloudflare
 3. SSL/TLS → **Full**
 4. Proxy enabled on `@`, `www`, `api`
@@ -269,7 +269,7 @@ Open in browser: `http://parrotmoc.online/auth/login`
 apt install -y certbot
 docker stop xander_nginx
 certbot certonly --standalone \
-  -d parrotmoc.online -d www.parrotmoc.online -d api.parrotmoc.online \
+  -d xanderai.online -d www.xanderai.online -d api.xanderai.online \
   --agree-tos -m your@email.com
 docker start xander_nginx
 ```

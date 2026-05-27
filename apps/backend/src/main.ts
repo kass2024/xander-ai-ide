@@ -20,8 +20,10 @@ async function bootstrap() {
         'http://localhost:5173',
         'http://127.0.0.1:5173',
         process.env.WEB_URL,
-        'https://parrotmoc.online',
-        'https://www.parrotmoc.online',
+        'https://xanderai.online',
+        'https://www.xanderai.online',
+        'http://xanderai.online',
+        'http://www.xanderai.online',
       ].filter(Boolean) as string[];
       // Electron packaged app (file:// / null origin) and local dev
       if (!origin || allowed.includes(origin) || origin.startsWith('file://')) {

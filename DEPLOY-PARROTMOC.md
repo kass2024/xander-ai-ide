@@ -1,14 +1,14 @@
-# Deploy Xander AI IDE on Linux VPS — parrotmoc.online
+# Deploy Xander AI IDE on Linux VPS — xanderai.online
 
 This guide deploys the **web dashboard** and **API backend** with Docker + Nginx virtual hosts.
 
 | URL | Service |
 |-----|---------|
-| https://parrotmoc.online | Next.js web (billing, login, dashboard) |
-| https://www.parrotmoc.online | Same (redirect or alias) |
-| https://api.parrotmoc.online | NestJS backend (AI, auth, Stripe webhooks) |
+| https://xanderai.online | Next.js web (billing, login, dashboard) |
+| https://www.xanderai.online | Same (redirect or alias) |
+| https://api.xanderai.online | NestJS backend (AI, auth, Stripe webhooks) |
 
-The **Electron desktop IDE** is built on Windows only; users install the `.exe` locally and point it at `https://api.parrotmoc.online`.
+The **Electron desktop IDE** is built on Windows only; users install the `.exe` locally and point it at `https://api.xanderai.online`.
 
 ---
 
@@ -47,7 +47,7 @@ Use a **Personal Access Token** as password if GitHub asks (Settings → Develop
 
 ## Part B — DNS (before VPS deploy)
 
-At your domain registrar (where `parrotmoc.online` is managed), add **A records**:
+At your domain registrar (where `xanderai.online` is managed), add **A records**:
 
 | Host | Type | Value |
 |------|------|--------|
@@ -58,8 +58,8 @@ At your domain registrar (where `parrotmoc.online` is managed), add **A records*
 Wait 5–30 minutes for DNS to propagate. Check:
 
 ```bash
-ping parrotmoc.online
-ping api.parrotmoc.online
+ping xanderai.online
+ping api.xanderai.online
 ```
 
 ---
@@ -131,10 +131,10 @@ STRIPE_SECRET_KEY=sk_live_...
 STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 
-WEB_URL=https://parrotmoc.online
-NEXT_PUBLIC_API_URL=https://api.parrotmoc.online
+WEB_URL=https://xanderai.online
+NEXT_PUBLIC_API_URL=https://api.xanderai.online
 
-ADMIN_EMAIL=admin@parrotmoc.online
+ADMIN_EMAIL=admin@xanderai.online
 ADMIN_PASSWORD=STRONG_ADMIN_PASSWORD
 RUN_SEED=true
 ```
@@ -149,7 +149,7 @@ openssl rand -base64 48
 
 In [Stripe Dashboard → Webhooks](https://dashboard.stripe.com/webhooks):
 
-- **URL:** `https://api.parrotmoc.online/billing/webhook`
+- **URL:** `https://api.xanderai.online/billing/webhook`
 - **Events:** `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
 - Copy signing secret → `STRIPE_WEBHOOK_SECRET` in `.env.production`
 
@@ -176,8 +176,8 @@ docker logs xander_web --tail 30
 
 ```bash
 curl -s http://localhost/health
-curl -s http://api.parrotmoc.online/health
-# From your PC browser: http://parrotmoc.online
+curl -s http://api.xanderai.online/health
+# From your PC browser: http://xanderai.online
 ```
 
 ---
@@ -194,11 +194,11 @@ sudo apt install -y certbot
 # Stop docker nginx temporarily
 docker stop xander_nginx
 
-sudo certbot certonly --standalone -d parrotmoc.online -d www.parrotmoc.online -d api.parrotmoc.online --agree-tos -m your@email.com
+sudo certbot certonly --standalone -d xanderai.online -d www.xanderai.online -d api.xanderai.online --agree-tos -m your@email.com
 
 # Certificates are in:
-# /etc/letsencrypt/live/parrotmoc.online/fullchain.pem
-# /etc/letsencrypt/live/parrotmoc.online/privkey.pem
+# /etc/letsencrypt/live/xanderai.online/fullchain.pem
+# /etc/letsencrypt/live/xanderai.online/privkey.pem
 ```
 
 Add SSL to `docker-compose.prod.yml` nginx service volumes:
@@ -218,7 +218,7 @@ docker compose -f docker-compose.prod.yml restart nginx
 
 ### Option 2: Cloudflare (easiest)
 
-1. Add site `parrotmoc.online` to Cloudflare
+1. Add site `xanderai.online` to Cloudflare
 2. Point nameservers to Cloudflare
 3. SSL/TLS → **Full** or **Full (strict)**
 4. Orange-cloud proxy on `@`, `www`, `api`
@@ -237,12 +237,12 @@ sudo certbot renew --dry-run
 Users running **Xander AI IDE** on Windows must reach your API:
 
 1. Build desktop with API URL baked in, or set at runtime via env:
-   - `VITE_API_URL=https://api.parrotmoc.online` when building web/desktop if applicable
+   - `VITE_API_URL=https://api.xanderai.online` when building web/desktop if applicable
 2. In packaged app, default is often `http://localhost:3001` — for production distribute a config or rebuild with:
 
 ```powershell
 # On Windows build machine
-$env:VITE_API_URL="https://api.parrotmoc.online"
+$env:VITE_API_URL="https://api.xanderai.online"
 cd apps\desktop
 npm run build
 npm run dist:win
@@ -280,7 +280,7 @@ docker compose -f docker-compose.prod.yml restart backend
 |---------|-----|
 | `Can't reach database` | `docker logs xander_postgres`, wait for healthy |
 | 502 Bad Gateway | `docker ps`, ensure backend health is green |
-| Stripe webhook fails | URL must be `https://api.parrotmoc.online/billing/webhook`, raw body |
+| Stripe webhook fails | URL must be `https://api.xanderai.online/billing/webhook`, raw body |
 | CORS errors from desktop | Backend must allow origin; check `main.ts` CORS for your domain |
 | DNS not resolving | Wait for propagation; verify A records |
 
@@ -292,7 +292,7 @@ docker compose -f docker-compose.prod.yml restart backend
 - [ ] DNS: `@`, `www`, `api` → VPS IP
 - [ ] `.env.production` filled on VPS
 - [ ] `docker compose ... up -d --build` succeeds
-- [ ] `https://api.parrotmoc.online/health` returns OK
-- [ ] `https://parrotmoc.online` loads dashboard
+- [ ] `https://api.xanderai.online/health` returns OK
+- [ ] `https://xanderai.online` loads dashboard
 - [ ] Stripe webhook configured
 - [ ] SSL enabled (Certbot or Cloudflare)

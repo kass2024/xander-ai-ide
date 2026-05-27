@@ -58,13 +58,13 @@ STRIPE_SECRET_KEY=$(Get-Val 'STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY=$(Get-Val 'STRIPE_PUBLISHABLE_KEY')
 STRIPE_WEBHOOK_SECRET=whsec_REPLACE_AFTER_CREATING_STRIPE_WEBHOOK_ON_VPS
 
-WEB_URL=https://parrotmoc.online
-NEXT_PUBLIC_API_URL=https://api.parrotmoc.online
+WEB_URL=https://xanderai.online
+NEXT_PUBLIC_API_URL=https://api.xanderai.online
 
 RUN_SEED=true
 AI_RATE_LIMIT_PER_MIN=60
 
-ADMIN_EMAIL=admin@parrotmoc.online
+ADMIN_EMAIL=admin@xanderai.online
 ADMIN_PASSWORD=$adminPass
 "@
 

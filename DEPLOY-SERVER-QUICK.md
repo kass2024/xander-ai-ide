@@ -1,4 +1,4 @@
-# parrotmoc.online — Server deploy cheat sheet
+# xanderai.online — Server deploy cheat sheet
 
 **Repo:** https://github.com/kass2024/xander-ai-ide.git
 
@@ -44,34 +44,34 @@ OPENAI_API_KEY=sk-...
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 
-WEB_URL=https://parrotmoc.online
-NEXT_PUBLIC_API_URL=https://api.parrotmoc.online
+WEB_URL=https://xanderai.online
+NEXT_PUBLIC_API_URL=https://api.xanderai.online
 
-ADMIN_EMAIL=admin@parrotmoc.online
+ADMIN_EMAIL=admin@xanderai.online
 ADMIN_PASSWORD=strong_admin_password
 RUN_SEED=true
 ```
 
-**Stripe webhook URL:** `https://api.parrotmoc.online/billing/webhook`
+**Stripe webhook URL:** `https://api.xanderai.online/billing/webhook`
 
 ## Docker services (virtual hosts in `nginx.prod.conf`)
 
 | Container | Port | Domain |
 |-----------|------|--------|
 | xander_nginx | 80, 443 | routes traffic |
-| xander_web | 3000 | parrotmoc.online, www |
-| xander_backend | 3001 | api.parrotmoc.online |
+| xander_web | 3000 | xanderai.online, www |
+| xander_backend | 3001 | api.xanderai.online |
 | xander_postgres | internal | DB |
 | xander_redis | internal | cache |
 | xander_qdrant | internal | vector search |
 
 ## HTTPS / SSL (go live)
 
-See **`SSL-PARROTMOC.md`** or run:
+See **`SSL-XANDERAI.md`** or run:
 
 ```bash
-chmod +x scripts/setup-ssl-parrotmoc.sh
-CERTBOT_EMAIL=admin@parrotmoc.online ./scripts/setup-ssl-parrotmoc.sh
+chmod +x scripts/setup-ssl.sh
+CERTBOT_EMAIL=admin@xanderai.online ./scripts/setup-ssl.sh
 ```
 
 ## Port 80 already in use (nginx fails to start)
@@ -88,8 +88,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
 ## Verify
 
 ```bash
-curl http://api.parrotmoc.online/health
-curl http://parrotmoc.online
+curl http://api.xanderai.online/health
+curl http://xanderai.online
 docker compose -f docker-compose.prod.yml ps
 docker logs xander_backend --tail 50
 ```

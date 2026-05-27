@@ -16,7 +16,7 @@ ENV_FILE="${ENV_FILE:-.env.production}"
 COMPOSE="docker compose -f docker-compose.prod.yml --env-file $ENV_FILE"
 
 # Use SSL overlay if certs exist
-if [ -f "certbot/conf/live/parrotmoc.online/fullchain.pem" ]; then
+if [ -f "certbot/conf/live/xanderai.online/fullchain.pem" ]; then
   COMPOSE="$COMPOSE -f docker-compose.ssl.yml"
 fi
 
