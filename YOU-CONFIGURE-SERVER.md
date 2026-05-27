@@ -58,9 +58,16 @@ cd /opt && git clone https://github.com/kass2024/xander-ai-ide.git && cd xander-
 cp .env.production.example .env.production
 nano .env.production   # passwords, keys, parrotmoc.online URLs
 
-# 4. Pull latest fix (if build failed before) then deploy
+# 4. Pull latest fix then deploy (if build fails, use script below)
 git pull origin main
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+chmod +x scripts/vps-docker-build.sh
+./scripts/vps-docker-build.sh
+
+# OR manual if script missing:
+# docker builder prune -af
+# docker compose -f docker-compose.prod.yml --env-file .env.production build --no-cache backend
+# docker compose -f docker-compose.prod.yml --env-file .env.production build --no-cache web
+# docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 # 5. Wait & verify
 docker logs -f xander_backend

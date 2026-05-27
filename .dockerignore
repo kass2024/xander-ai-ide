@@ -1,0 +1,33 @@
+# Git & docs
+.git
+.gitignore
+**/*.md
+!apps/web/README.md
+
+# Dependencies (installed inside Docker)
+node_modules
+**/node_modules
+
+# Secrets
+.env
+.env.*
+!.env.production.example
+server-deploy.env
+production.env
+
+# Desktop / local builds
+apps/desktop/out
+apps/desktop/release
+desktop
+
+# Backend / web local output
+apps/backend/dist
+apps/web/.next
+apps/web/out
+
+# Large / irrelevant for prod images
+apps/desktop
+terminals
+.cursor
+*.exe
+*.blockmap
