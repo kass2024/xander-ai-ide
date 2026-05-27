@@ -1,0 +1,121 @@
+# Xander AI IDE — Production Docker Compose (VPS)
+# Usage:
+#   cp .env.production.example .env.production
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: xander_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-xander_ai_ide}
+    volumes:
+      - xander_postgres_data:/var/lib/postgresql/data
+    networks:
+      - xander_net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: xander_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - xander_redis_data:/data
+    networks:
+      - xander_net
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: xander_qdrant
+    restart: unless-stopped
+    volumes:
+      - xander_qdrant_data:/qdrant/storage
+    networks:
+      - xander_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: xander_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-xander_ai_ide}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      NODE_ENV: production
+      PORT: 3001
+      RUN_SEED: ${RUN_SEED:-true}
+      WEB_URL: ${WEB_URL:-http://localhost:3000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - xander_net
+    expose:
+      - '3001'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    container_name: xander_web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - xander_net
+    expose:
+      - '3000'
+
+  nginx:
+    image: nginx:alpine
+    container_name: xander_nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+      - backend
+    networks:
+      - xander_net
+
+networks:
+  xander_net:
+    driver: bridge
+
+volumes:
+  xander_postgres_data:
+  xander_redis_data:
+  xander_qdrant_data:

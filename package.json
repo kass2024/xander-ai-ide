@@ -1,0 +1,32 @@
+{
+  "name": "xander-ai-ide",
+  "version": "1.0.0",
+  "description": "Xander AI IDE - Production AI coding IDE with SaaS subscription",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:backend & npm run dev:web & npm run dev:desktop",
+    "dev:backend": "cd apps/backend && npm run dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:desktop": "cd apps/desktop && npm run dev",
+    "build": "npm run build:backend && npm run build:web && npm run build:desktop",
+    "build:backend": "cd apps/backend && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "build:desktop": "cd apps/desktop && npm run build",
+    "package": "cd apps/desktop && npm run package",
+    "dist": "cd apps/desktop && npm run dist:win",
+    "docker:infra": "docker compose up -d",
+    "docker:prod": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
+    "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
+    "db:migrate": "cd apps/backend && npx prisma migrate deploy",
+    "db:seed": "cd apps/backend && npx tsx prisma/seed.ts",
+    "start:backend": "cd apps/backend && npm run start",
+    "start:web": "cd apps/web && npm run start",
+    "lint": "cd apps/web && npm run lint"
+  },
+  "keywords": ["ai", "ide", "xander", "saas", "electron", "nextjs", "nestjs"],
+  "author": "Xander AI",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

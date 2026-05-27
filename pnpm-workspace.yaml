@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/client': set this to true or false
+  '@prisma/engines': true
+  bcrypt: true
+  electron: set this to true or false
+  electron-winstaller: false
+  esbuild: false
+  prisma: true
+  sharp: true
+  unrs-resolver: true

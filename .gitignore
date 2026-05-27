@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Environment & secrets (never commit)
+.env
+.env.local
+.env.production
+.env.*.local
+production.env
+apps/backend/.env
+apps/desktop/.env
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+apps/backend/dist/
+apps/desktop/out/
+apps/desktop/release/
+
+# Electron / IDE artifacts
+*.blockmap
+builder-debug.yml
+desktop/
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Prisma
+apps/backend/prisma/*.db
+
+# Test / debug scripts (optional local only)
+debug-registration.js
+test-*.js
+fix-auth-setup.js
+
+# Turbo
+.turbo/

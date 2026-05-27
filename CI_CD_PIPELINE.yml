@@ -1,0 +1,139 @@
+# GitHub Actions CI/CD Pipeline for Xander AI IDE
+
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xander_ai_ide_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        cd apps/backend && npm ci
+        cd ../web && npm ci
+        cd ../desktop && npm ci
+    
+    - name: Run backend tests
+      run: |
+        cd apps/backend
+        npm run test
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/xander_ai_ide_test
+        REDIS_URL: redis://localhost:6379
+        QDRANT_URL: http://localhost:6333
+    
+    - name: Run web tests
+      run: |
+        cd apps/web
+        npm run test
+    
+    - name: Build applications
+      run: |
+        cd apps/backend && npm run build
+        cd ../web && npm run build
+        cd ../desktop && npm run build
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.backend
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+        labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Build and push web image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.web
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/web:latest
+        labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add your deployment commands here
+        # kubectl apply -f kubernetes-deployment.yml
+        # or docker-compose up -d

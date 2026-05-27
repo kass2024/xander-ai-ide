@@ -1,0 +1,367 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  fullName          String?
+  avatar            String?
+  role              UserRole  @default(USER)
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Analytics fields
+  currentStreak     Int       @default(0)
+  recordStreak      Int       @default(0)
+  totalLinesWritten Int       @default(0)
+  lastActiveDate    DateTime?
+
+  // Relations
+  subscriptions     Subscription[]
+  organizations     OrganizationMember[]
+  projects          Project[]
+  conversations     Conversation[]
+  usageLogs         UsageLog[]
+  creditTransactions CreditTransaction[]
+  apiRequests       ApiRequest[]
+  settings          UserSettings?
+  billingInvoices   BillingInvoice[]
+  contributions     Contribution[]
+
+  stripeCustomerId  String?   @unique
+
+  @@map("users")
+}
+
+model UserSettings {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  theme             String    @default("dark")
+  language          String    @default("en")
+  autoSave          Boolean   @default(true)
+  autoRecharge      Boolean   @default(false)
+  notifications     Boolean   @default(true)
+  aiModel           String    @default("gpt-5.1")
+  maxTokens         Int       @default(4000)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Organization {
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  description       String?
+  logo              String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  members           OrganizationMember[]
+  projects          Project[]
+  subscriptions     Subscription[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id                String            @id @default(cuid())
+  userId            String
+  organizationId    String
+  role              OrganizationRole  @default(MEMBER)
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("organization_members")
+}
+
+model Plan {
+  id                String    @id @default(cuid())
+  name              String    @unique
+  slug              String    @unique
+  description       String?
+  price             Decimal   @db.Decimal(10, 2)
+  interval          String    // "month" or "year"
+  features          Json      // List of features
+  limits            Json      // Usage limits
+  isActive          Boolean   @default(true)
+  sortOrder         Int       @default(0)
+  stripeProductId   String?
+  stripePriceId     String?
+  stripePriceIdYearly String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  subscriptions     Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                String            @id @default(cuid())
+  userId            String?
+  organizationId    String?
+  planId            String
+  status            SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId  String?
+  stripeSubscriptionId String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd  DateTime?
+  cancelAtPeriodEnd Boolean           @default(false)
+  canceledAt        DateTime?
+  trialEndsAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  // Relations
+  user              User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan              Plan              @relation(fields: [planId], references: [id])
+  quotaUsages       QuotaUsage[]
+  creditTransactions CreditTransaction[]
+
+  @@map("subscriptions")
+}
+
+model QuotaUsage {
+  id                String    @id @default(cuid())
+  subscriptionId    String
+  period            String    // "daily", "weekly", "monthly"
+  periodStart       DateTime
+  periodEnd         DateTime
+  tokensUsed        Int       @default(0)
+  requestsUsed      Int       @default(0)
+  filesProcessed    Int       @default(0)
+  repositoriesIndexed Int     @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, period, periodStart])
+  @@map("quota_usages")
+}
+
+model CreditTransaction {
+  id                String              @id @default(cuid())
+  userId            String?
+  subscriptionId    String?
+  type              CreditTransactionType
+  amount            Int
+  balance           Int
+  description       String?
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+
+  user              User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription      Subscription?       @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model UsageLog {
+  id                String    @id @default(cuid())
+  userId            String
+  type              String    // "chat", "autocomplete", "composer", "indexing"
+  tokensUsed        Int       @default(0)
+  cost              Decimal   @db.Decimal(10, 6) @default(0)
+  model             String
+  metadata          Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("usage_logs")
+}
+
+model ApiRequest {
+  id                String    @id @default(cuid())
+  userId            String
+  endpoint          String
+  method            String
+  statusCode        Int
+  responseTime      Int       // in milliseconds
+  tokensUsed        Int       @default(0)
+  cost              Decimal   @db.Decimal(10, 6) @default(0)
+  metadata          Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_requests")
+}
+
+model Project {
+  id                String    @id @default(cuid())
+  userId            String?
+  organizationId    String?
+  name              String
+  description       String?
+  path              String
+  language          String?
+  isActive          Boolean   @default(true)
+  lastIndexedAt     DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  user              User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization      Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositories      Repository[]
+  conversations     Conversation[]
+
+  @@map("projects")
+}
+
+model Repository {
+  id                String    @id @default(cuid())
+  projectId         String
+  name              String
+  path              String
+  gitUrl            String?
+  branch            String    @default("main")
+  isActive          Boolean   @default(true)
+  lastIndexedAt     DateTime?
+  fileCount         Int       @default(0)
+  totalSize         BigInt    @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("repositories")
+}
+
+model Conversation {
+  id                String    @id @default(cuid())
+  userId            String?
+  projectId         String?
+  title             String?
+  model             String    @default("gpt-5.1")
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  user              User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project           Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages          Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id                String    @id @default(cuid())
+  conversationId    String
+  role              MessageRole
+  content           String
+  tokens            Int       @default(0)
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Contribution {
+  id                String    @id @default(cuid())
+  userId            String
+  date              DateTime  @default(now())
+  linesWritten      Int       @default(0)
+  commits           Int       @default(0)
+  requests          Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("contributions")
+}
+
+model BillingInvoice {
+  id                String            @id @default(cuid())
+  userId            String
+  stripeInvoiceId  String?
+  number            String?
+  status            InvoiceStatus     @default(DRAFT)
+  amount            Decimal           @db.Decimal(10, 2)
+  currency          String            @default("usd")
+  dueDate           DateTime?
+  paidAt            DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("billing_invoices")
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  UNPAID
+  TRIALING
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  USAGE
+  REFUND
+  BONUS
+  ADJUSTMENT
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  UNCREDITABLE
+  VOID
+}
