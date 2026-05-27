@@ -9,6 +9,7 @@ node_modules/
 .env.production
 .env.*.local
 production.env
+server-deploy.env
 apps/backend/.env
 apps/desktop/.env
 
