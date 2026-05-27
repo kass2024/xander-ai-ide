@@ -1,0 +1,7 @@
+# After Let's Encrypt: use with NGINX_CONFIG=./nginx.ssl.conf in .env.production
+services:
+  nginx:
+    ports:
+      - '443:443'
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt:ro

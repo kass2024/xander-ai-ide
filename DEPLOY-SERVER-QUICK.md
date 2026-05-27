@@ -65,6 +65,15 @@ RUN_SEED=true
 | xander_redis | internal | cache |
 | xander_qdrant | internal | vector search |
 
+## HTTPS / SSL (go live)
+
+See **`SSL-PARROTMOC.md`** or run:
+
+```bash
+chmod +x scripts/setup-ssl-parrotmoc.sh
+CERTBOT_EMAIL=admin@parrotmoc.online ./scripts/setup-ssl-parrotmoc.sh
+```
+
 ## Port 80 already in use (nginx fails to start)
 
 Something on the VPS is already bound to port 80 (often system nginx or Apache):

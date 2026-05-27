@@ -37,6 +37,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
+# TLS certificates (generated on VPS)
+certbot/conf/
+certbot/www/.well-known/
+
 # Prisma
 apps/backend/prisma/*.db
 
