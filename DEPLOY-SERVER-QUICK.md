@@ -65,6 +65,17 @@ RUN_SEED=true
 | xander_redis | internal | cache |
 | xander_qdrant | internal | vector search |
 
+## Port 80 already in use (nginx fails to start)
+
+Something on the VPS is already bound to port 80 (often system nginx or Apache):
+
+```bash
+sudo ss -tlnp | grep ':80 '
+sudo systemctl stop nginx apache2 2>/dev/null
+sudo systemctl disable nginx apache2 2>/dev/null
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
+```
+
 ## Verify
 
 ```bash
@@ -90,6 +101,8 @@ Common causes:
 | Container exits before Nest | Check migrate logs above; ensure `JWT_SECRET` is set |
 | `POSTGRES_PASSWORD` changed after first deploy | Postgres volume keeps old password — reset volume or revert password |
 | `password authentication failed` | `POSTGRES_PASSWORD` in `.env.production` must match what postgres was created with |
+| `bcrypt_lib.node` / `Cannot find module bcrypt` | Rebuild backend image after pull (`npm rebuild bcrypt` fix in Dockerfile) |
+| `address already in use` on port 80 | Stop host nginx/Apache (see above) |
 
 ```bash
 chmod +x scripts/vps-backend-logs.sh
