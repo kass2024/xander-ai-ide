@@ -51,8 +51,12 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login(loginEmail, loginPassword);
-    await fetchAll();
+    try {
+      await login(loginEmail.trim(), loginPassword);
+      void fetchAll();
+    } catch {
+      /* authError shown in form */
+    }
   };
 
   const handlePlanChange = async (planId: string) => {

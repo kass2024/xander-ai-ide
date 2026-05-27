@@ -30,9 +30,8 @@ export default function AuthForm({ type }: AuthFormProps) {
         setMessage({ type: "success", text: "Account created! Redirecting to login..." });
         setTimeout(() => router.push("/auth/login"), 1500);
       } else {
-        await login(email, password);
-        setMessage({ type: "success", text: "Login successful! Redirecting..." });
-        setTimeout(() => router.push("/dashboard"), 800);
+        await login(email.trim().toLowerCase(), password);
+        router.replace("/dashboard");
       }
     } catch (err) {
       setMessage({

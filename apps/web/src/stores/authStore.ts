@@ -42,13 +42,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email, password) => {
     set({ loading: true });
     try {
-      const result = await apiClient.login(email, password);
+      const result = await apiClient.login(email.trim().toLowerCase(), password);
       apiClient.setToken(result.access_token);
       set({
         authUser: result.user,
         user: mapToDashboardUser(result.user as unknown as Record<string, unknown>),
+        initialized: true,
       });
-      await get().refreshUser();
+      // Load billing/analytics in background — do not block redirect
+      void get().refreshUser().catch(() => {});
     } finally {
       set({ loading: false });
     }

@@ -15,7 +15,7 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.usersService.findByEmail(email.trim().toLowerCase());
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -29,15 +29,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Update last login
-    await this.usersService.updateLastLogin(user.id);
-
     return user;
   }
 
-  async login(loginDto: LoginDto) {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
-    
+  async loginFromUser(user: {
+    id: string;
+    email: string;
+    fullName?: string | null;
+    role: string;
+    avatar?: string | null;
+  }) {
+    await this.usersService.updateLastLogin(user.id);
+
     const payload = {
       sub: user.id,
       email: user.email,
@@ -56,7 +59,14 @@ export class AuthService {
     };
   }
 
+  /** @deprecated Use LocalAuthGuard + loginFromUser */
+  async login(loginDto: LoginDto) {
+    const user = await this.validateUser(loginDto.email, loginDto.password);
+    return this.loginFromUser(user);
+  }
+
   async register(registerDto: RegisterDto) {
+    registerDto.email = registerDto.email.trim().toLowerCase();
     // Check if user already exists
     const existingUser = await this.usersService.findByEmail(registerDto.email);
     if (existingUser) {
@@ -64,7 +74,7 @@ export class AuthService {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(registerDto.password, 12);
+    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
     // Create user
     const user = await this.usersService.create({
@@ -105,23 +115,20 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    const user = await this.usersService.findOne(userId);
-    const [subscription, analytics, usage] = await Promise.all([
+    const [user, subscription] = await Promise.all([
+      this.usersService.findOne(userId),
       this.usersService.getUserSubscription(userId),
-      this.usersService.getAnalytics(userId),
-      this.usersService.getUserUsageStats(userId),
     ]);
 
-    const planSlug = (subscription as { plan?: { id?: string; slug?: string } })?.plan?.id
-      || (subscription as { plan?: { slug?: string } })?.plan?.slug
-      || 'free';
+    const planSlug =
+      (subscription as { plan?: { id?: string; slug?: string } })?.plan?.id ||
+      (subscription as { plan?: { slug?: string } })?.plan?.slug ||
+      'free';
 
     return {
       ...user,
       plan: planSlug,
       subscription,
-      analytics,
-      usage,
     };
   }
 }

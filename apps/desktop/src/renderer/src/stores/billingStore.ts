@@ -23,14 +23,7 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     if (!apiClient.getToken()) return;
     set({ loading: true, error: null });
     try {
-      let subscription = await apiClient.getCurrentSubscription();
-      if (!subscription?.plan?.id || subscription.plan.id === 'free') {
-        try {
-          subscription = await apiClient.syncBilling();
-        } catch {
-          /* no stripe subscription yet */
-        }
-      }
+      const subscription = await apiClient.getCurrentSubscription();
       const [plans, usage] = await Promise.all([
         apiClient.getAvailablePlans(),
         apiClient.getUsage(),

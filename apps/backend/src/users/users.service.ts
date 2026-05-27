@@ -147,13 +147,15 @@ export class UsersService {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const aggregate = async (since: Date) => {
-      const logs = await this.prisma.usageLog.findMany({
+      const result = await this.prisma.usageLog.aggregate({
         where: { userId, createdAt: { gte: since } },
+        _sum: { tokensUsed: true, cost: true },
+        _count: true,
       });
       return {
-        tokensUsed: logs.reduce((s, l) => s + l.tokensUsed, 0),
-        requests: logs.length,
-        cost: logs.reduce((s, l) => s + Number(l.cost), 0),
+        tokensUsed: result._sum.tokensUsed ?? 0,
+        requests: result._count,
+        cost: Number(result._sum.cost ?? 0),
       };
     };
 
@@ -169,14 +171,20 @@ export class UsersService {
     if (period === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
     else startDate.setMonth(startDate.getMonth() - 1);
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const logs = await this.prisma.usageLog.findMany({
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { totalLinesWritten: true, currentStreak: true, recordStreak: true },
+    });
+
+    const logs = await this.prisma.usageLog.groupBy({
+      by: ['model'],
       where: { userId, createdAt: { gte: startDate } },
+      _sum: { cost: true },
     });
 
     const costByModel = new Map<string, number>();
-    for (const log of logs) {
-      costByModel.set(log.model, (costByModel.get(log.model) || 0) + Number(log.cost));
+    for (const row of logs) {
+      costByModel.set(row.model, Number(row._sum.cost ?? 0));
     }
     const totalCost = [...costByModel.values()].reduce((a, b) => a + b, 0);
 

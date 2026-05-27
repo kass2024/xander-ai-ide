@@ -26,7 +26,11 @@ class ApiClient {
         else if (typeof raw === 'string') msg = raw;
         else if (raw && typeof raw.message === 'string') msg = raw.message;
       } catch { /* ignore */ }
-      if (response.status === 401) {
+      if (
+        response.status === 401 &&
+        !endpoint.startsWith('/auth/login') &&
+        !endpoint.startsWith('/auth/register')
+      ) {
         msg = 'Sign in via Settings → General to use Xander Assistant.';
       } else if (response.status === 404 && endpoint.includes('/ai/agent')) {
         msg = 'Agent API not found. Rebuild and restart the backend:\ncd apps\\backend && npm run build && npm run dev';
@@ -44,7 +48,11 @@ class ApiClient {
 
   async login(email: string, password: string) {
     const result = await this.request<{ access_token: string; user: Record<string, unknown> }>(
-      '/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      },
     );
     this.setToken(result.access_token);
     return result;
