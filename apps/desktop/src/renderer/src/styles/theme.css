@@ -1,0 +1,529 @@
+/* Xander AI IDE - Cursor/VS Code Theme System */
+
+/* CSS Custom Properties for VS Code/Cursor Theme */
+:root {
+  /* Background Colors */
+  --vscode-editor-background: #1e1e1e;
+  --vscode-editor-lineHighlightBackground: #2d2d30;
+  --vscode-editor-selectionBackground: #264f78;
+  --vscode-editor-inactiveSelectionBackground: #3a3d41;
+  --vscode-editor-wordHighlightBackground: #575757b8;
+  --vscode-editor-wordHighlightStrongBackground: #004972b8;
+  --vscode-editor-findMatchHighlightBackground: #515c6a;
+  --vscode-editor-findMatchHighlightBorder: #ea7000;
+  
+  /* Sidebar Colors */
+  --vscode-sidebar-background: #252526;
+  --vscode-sideBar-background: #252526;
+  --vscode-sideBarSectionHeader-background: #2d2d30;
+  --vscode-sideBarSectionHeader-border: #3e3e3e;
+  --vscode-tree-indentGuidesStroke: #585858;
+  
+  /* Activity Bar */
+  --vscode-activityBar-background: #333333;
+  --vscode-activityBar-activeBackground: #2d2d30;
+  --vscode-activityBar-inactiveForeground: #ffffff80;
+  --vscode-activityBar-activeForeground: #ffffff;
+  --vscode-activityBar-border: #3e3e3e;
+  
+  /* Title Bar */
+  --vscode-titleBar-background: #1e1e1e;
+  --vscode-titleBar-activeBackground: #1e1e1e;
+  --vscode-titleBar-border: #3e3e3e;
+  
+  /* Tabs */
+  --vscode-tab-activeBackground: #1e1e1e;
+  --vscode-tab-inactiveBackground: #2d2d30;
+  --vscode-tab-hoverBackground: #323233;
+  --vscode-tab-activeForeground: #ffffff;
+  --vscode-tab-inactiveForeground: #ffffff80;
+  --vscode-tab-border: #3e3e3e;
+  --vscode-tab-activeBorder: #007acc;
+  --vscode-tab-activeBorderTop: #007acc;
+  
+  /* Buttons */
+  --vscode-button-background: #0e639c;
+  --vscode-button-foreground: #ffffff;
+  --vscode-button-hoverBackground: #1177bb;
+  --vscode-button-secondaryBackground: #3a3d41;
+  --vscode-button-secondaryForeground: #cccccc;
+  --vscode-button-secondaryHoverBackground: #45494e;
+  
+  /* Input Fields */
+  --vscode-input-background: #3c3c3c;
+  --vscode-input-foreground: #cccccc;
+  --vscode-input-border: #3e3e3e;
+  --vscode-input-placeholderForeground: #ffffff80;
+  
+  /* Dropdown */
+  --vscode-dropdown-background: #3c3c3c;
+  --vscode-dropdown-foreground: #cccccc;
+  --vscode-dropdown-border: #3e3e3e;
+  
+  /* Lists */
+  --vscode-list-background: #252526;
+  --vscode-list-foreground: #cccccc;
+  --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-list-activeSelectionBackground: #094771;
+  --vscode-list-activeSelectionForeground: #ffffff;
+  --vscode-list-inactiveSelectionBackground: #37373d;
+  --vscode-list-focusBackground: #062f4a;
+  --vscode-list-focusOutline: #007fd4;
+  
+  /* Badges */
+  --vscode-badge-background: #4d4d4d;
+  --vscode-badge-foreground: #ffffff;
+  
+  /* Progress Bar */
+  --vscode-progressBar-background: #0e70c0;
+  
+  /* Widgets */
+  --vscode-widget-background: #252526;
+  --vscode-widget-border: #3e3e3e;
+  --vscode-widget-shadow: rgba(0, 0, 0, 0.36);
+  
+  /* Status Bar */
+  --vscode-statusBar-background: #007acc;
+  --vscode-statusBar-foreground: #ffffff;
+  --vscode-statusBar-border: #3e3e3e;
+  --vscode-statusBar-noFolderBackground: #68217a;
+  --vscode-statusBar-debuggingBackground: #cc6633;
+  --vscode-statusBarItem-hoverBackground: rgba(255, 255, 255, 0.16);
+  --vscode-statusBarItem-activeBackground: rgba(255, 255, 255, 0.28);
+  
+  /* Panel */
+  --vscode-panel-background: #1e1e1e;
+  --vscode-panel-border: #3e3e3e;
+  --vscode-panelTitle-activeBorder: #e7e7e7;
+  --vscode-panelTitle-activeForeground: #e7e7e7;
+  --vscode-panelTitle-inactiveForeground: #ffffff80;
+  
+  /* Terminal */
+  --vscode-terminal-background: #1e1e1e;
+  --vscode-terminal-foreground: #cccccc;
+  --vscode-terminal-selectionBackground: #264f78;
+  --vscode-terminal-border: #3e3e3e;
+  
+  /* AI Assistant */
+  --vscode-ai-background: #2d2d30;
+  --vscode-ai-border: #3e3e3e;
+  --vscode-ai-userMessage: #094771;
+  --vscode-ai-assistantMessage: #252526;
+  --vscode-ai-codeBackground: #1e1e1e;
+  --vscode-ai-streaming: #007acc;
+  
+  /* Text Colors */
+  --vscode-foreground: #cccccc;
+  --vscode-disabledForeground: #ffffff80;
+  --vscode-errorForeground: #f14c4c;
+  --vscode-warningForeground: #ffcc02;
+  --vscode-infoForeground: #3794ff;
+  --vscode-descriptionForeground: #ffffff80;
+  
+  /* Borders */
+  --vscode-border: #3e3e3e;
+  --vscode-focusBorder: #007fd4;
+  --vscode-contrastBorder: #6fc3df;
+  --vscode-contrastActiveBorder: #f38518;
+  
+  /* Shadows */
+  --vscode-widget-shadow: rgba(0, 0, 0, 0.36);
+  --vscode-shadow: #000000;
+  --vscode-shadow-color: rgba(0, 0, 0, 0.36);
+  
+  /* Scrollbar */
+  --vscode-scrollbarSlider-background: #797979;
+  --vscode-scrollbarSlider-hoverBackground: #646464;
+  --vscode-scrollbarSlider-activeBackground: #4b4b4b;
+  
+  /* Typography */
+  --vscode-font-family: 'Segoe WPC', 'Segoe UI', 'Helvetica Neue', 'Helvetica', 'Arial', 'Arial', sans-serif;
+  --vscode-font-weight: 400;
+  --vscode-font-size: 13px;
+  --vscode-editor-font-family: 'Consolas', 'Courier New', monospace;
+  --vscode-editor-font-weight: 400;
+  --vscode-editor-font-size: 14px;
+  
+  /* Spacing */
+  --vscode-spacing-xs: 2px;
+  --vscode-spacing-sm: 4px;
+  --vscode-spacing-md: 8px;
+  --vscode-spacing-lg: 12px;
+  --vscode-spacing-xl: 16px;
+  --vscode-spacing-xxl: 20px;
+  
+  /* Border Radius */
+  --vscode-border-radius: 2px;
+  --vscode-border-radius-sm: 3px;
+  --vscode-border-radius-md: 6px;
+  --vscode-border-radius-lg: 8px;
+  
+  /* Transitions */
+  --vscode-transition-fast: 0.1s ease;
+  --vscode-transition-normal: 0.2s ease;
+  --vscode-transition-slow: 0.3s ease;
+}
+
+/* Base Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  font-weight: var(--vscode-font-weight);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--vscode-editor-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, #797979);
+  border-radius: var(--vscode-border-radius-md);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground, #646464);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground, #4b4b4b);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--vscode-editor-background);
+}
+
+/* Text Selection */
+::selection {
+  background-color: var(--vscode-editor-selectionBackground);
+}
+
+::-moz-selection {
+  background-color: var(--vscode-editor-selectionBackground);
+}
+
+/* Focus Styles */
+:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* Disable text selection for UI elements */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Base Button Styles */
+button {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  border: none;
+  border-radius: var(--vscode-border-radius);
+  cursor: pointer;
+  transition: background-color var(--vscode-transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--vscode-spacing-sm) var(--vscode-spacing-md);
+  color: var(--vscode-button-foreground);
+  background-color: var(--vscode-button-background);
+}
+
+button:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+button:active {
+  background-color: var(--vscode-button-background);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary Button */
+button.secondary {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+button.secondary:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* Icon Button */
+button.icon-button {
+  padding: var(--vscode-spacing-sm);
+  background-color: transparent;
+  color: var(--vscode-foreground);
+}
+
+button.icon-button:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+/* Input Styles */
+input, textarea, select {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: var(--vscode-border-radius);
+  padding: var(--vscode-spacing-sm) var(--vscode-spacing-md);
+  transition: border-color var(--vscode-transition-fast);
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--vscode-focusBorder);
+  outline: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Utility Classes */
+.flex {
+  display: flex;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.flex-center {
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.hidden {
+  display: none;
+}
+
+.text-xs {
+  font-size: 11px;
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.text-base {
+  font-size: 13px;
+}
+
+.text-lg {
+  font-size: 14px;
+}
+
+.text-xl {
+  font-size: 16px;
+}
+
+.font-mono {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+.overflow-auto {
+  overflow: auto;
+}
+
+.border {
+  border: 1px solid var(--vscode-border);
+}
+
+.border-top {
+  border-top: 1px solid var(--vscode-border);
+}
+
+.border-bottom {
+  border-bottom: 1px solid var(--vscode-border);
+}
+
+.border-left {
+  border-left: 1px solid var(--vscode-border);
+}
+
+.border-right {
+  border-right: 1px solid var(--vscode-border);
+}
+
+.rounded {
+  border-radius: var(--vscode-border-radius);
+}
+
+.rounded-sm {
+  border-radius: var(--vscode-border-radius-sm);
+}
+
+.rounded-md {
+  border-radius: var(--vscode-border-radius-md);
+}
+
+/* AI Specific Styles */
+.ai-gradient {
+  background: linear-gradient(135deg, #007acc 0%, #005a9e 100%);
+}
+
+.ai-gradient-text {
+  background: linear-gradient(135deg, #007acc 0%, #005a9e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.streaming-text {
+  position: relative;
+}
+
+.streaming-text::after {
+  content: '|';
+  position: absolute;
+  right: -8px;
+  top: 0;
+  color: var(--vscode-ai-streaming);
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Agent task progress cards */
+.task-progress-panel {
+  background: var(--vscode-sideBar-background);
+}
+.task-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+}
+.task-card--running {
+  border-color: rgba(139, 92, 246, 0.25);
+}
+.task-card--success {
+  border-color: rgba(52, 211, 153, 0.15);
+}
+.task-card--failed {
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+/* Monaco breakpoint gutter */
+.xander-breakpoint {
+  background: #e51400;
+  border-radius: 50%;
+  width: 10px !important;
+  height: 10px !important;
+  margin-left: 4px;
+  margin-top: 5px;
+}
