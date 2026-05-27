@@ -73,6 +73,7 @@ interface AIChatPanelProps {
   agentSessionId?: string | null;
   openFiles?: Array<{ filePath?: string; name: string; content: string }>;
   compact?: boolean;
+  onWorkspaceReady?: (path: string) => void;
 }
 
 interface ModelOption {
@@ -85,12 +86,12 @@ interface ModelOption {
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hello! I\'m **Xander Assistant**.\n\n- **Chat**: Ask questions about your code\n- **Agent**: Autonomous coding — reads, edits, runs commands (like Cursor Agent)\n- **Composer**: Multi-file edits with diff review\n\nOpen a project folder first. Sign in via Settings for API access. **Tab** accepts inline suggestions.',
+  content: 'Hello! I\'m **Xander Assistant**.\n\n- **Chat**: Ask questions about your code\n- **Agent**: Deep project work — analyzes files, edits, tests, git commit/push\n- **Composer**: Multi-file edits with diff review\n\nAgent can open your last project or pick a folder on first run. Sign in via Settings for API access. **Tab** accepts inline suggestions.',
   timestamp: new Date(),
   type: 'markdown',
 };
 
-export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, onFileChanged, onOpenFile, onRunTerminal, onRefreshGit, onRefreshExplorer, currentFilePath, selectedCode, projectPath, workspaceFolders = [], agentSessionId, openFiles = [], compact }: AIChatPanelProps) {
+export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, onFileChanged, onOpenFile, onRunTerminal, onRefreshGit, onRefreshExplorer, currentFilePath, selectedCode, projectPath, workspaceFolders = [], agentSessionId, openFiles = [], compact, onWorkspaceReady }: AIChatPanelProps) {
   const { sessions, addMessage, updateSession } = useAgentStore();
   const { startGeneration, handleStreamEvent, isActive: isGenerating } = useGenerationStore();
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
@@ -229,10 +230,6 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
       }
 
       if (mode === 'agent') {
-        if (!projectPath) {
-          throw new Error('Open a project folder first — Agent needs access to your codebase.');
-        }
-
         const context = await buildContext(prompt);
         setAgentStatus('Agent starting...');
 
@@ -610,10 +607,10 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
         </div>
       )}
 
-      {!projectPath && (builderMode || mode === 'agent' || mode === 'composer') && (
+      {!projectPath && (builderMode || mode === 'composer') && (
         <div className="mx-4 mt-2 px-3 py-2 rounded-lg bg-orange-900/30 border border-orange-600/30 text-[11px] text-orange-300 flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          Open a folder first: File → Open Folder (e.g. C:\xampp\htdocs\sample)
+          Open a folder for Composer/Builder, or Agent will prompt when you send a task.
         </div>
       )}
 
@@ -642,6 +639,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
           onRunTerminal={onRunTerminal}
           onRefreshGit={onRefreshGit}
           onRefreshExplorer={onRefreshExplorer}
+          onWorkspaceReady={onWorkspaceReady}
         />
       ) : (
         <>

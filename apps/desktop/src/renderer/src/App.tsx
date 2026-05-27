@@ -22,6 +22,7 @@ import { useAgentStore } from './stores/agentStore';
 import { useCodebaseIndexStore } from './stores/codebaseIndexStore';
 import { indexProjectForSearch } from './lib/codebaseSearch';
 import apiClient from './lib/api';
+import { saveLastWorkspace, restoreLastWorkspaceIfAny } from './lib/workspaceManager';
 import { MenuActionId } from './lib/menuActions';
 import { FileItem } from '../types';
 import './styles/theme.css';
@@ -112,11 +113,28 @@ function App() {
     };
   }, []);
 
+  const loadFiles = useCallback(async (projectPath: string) => {
+    await loadRoot(projectPath);
+  }, [loadRoot]);
+
+  useEffect(() => {
+    restoreLastWorkspaceIfAny(setCurrentProject, loadFiles).then((path) => {
+      if (path) setExpandedFolders(new Set([path]));
+    });
+  }, [loadFiles, setCurrentProject]);
+
   useEffect(() => {
     if (currentProject && apiClient.getToken()) {
       indexProjectForSearch(currentProject).catch(() => { /* optional */ });
     }
   }, [currentProject]);
+
+  const handleWorkspaceReady = useCallback(async (path: string) => {
+    setCurrentProject(path);
+    await loadFiles(path);
+    setExpandedFolders((prev) => new Set([...prev, path]));
+    saveLastWorkspace(path);
+  }, [loadFiles, setCurrentProject]);
 
   useEffect(() => {
     if (activeView === 'terminal') {
@@ -129,10 +147,6 @@ function App() {
       setActiveView('explorer');
     }
   }, [activeView]);
-
-  const loadFiles = async (projectPath: string) => {
-    await loadRoot(projectPath);
-  };
 
   const handleFolderToggle = async (folderPath: string) => {
     const isExpanded = expandedFolders.has(folderPath);
@@ -206,6 +220,7 @@ function App() {
     const result = await window.electronAPI.openProject(projectPath);
     if (result.success) {
       setCurrentProject(projectPath);
+      saveLastWorkspace(projectPath);
       await loadFiles(projectPath);
       setExpandedFolders(new Set([projectPath]));
     }
@@ -218,6 +233,7 @@ function App() {
     if (!result.success) return;
     if (!currentProject) {
       setCurrentProject(folderPath);
+      saveLastWorkspace(folderPath);
       await loadFiles(folderPath);
       setExpandedFolders(new Set([folderPath]));
       return;
@@ -652,6 +668,7 @@ function App() {
               onRefreshExplorer={() => refreshTree()}
               onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
               onRefreshGit={() => refreshGitStatus()}
+              onWorkspaceReady={handleWorkspaceReady}
               compact
             />
           </div>
@@ -854,6 +871,7 @@ function App() {
               onRefreshExplorer={() => refreshTree()}
               onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
               onRefreshGit={() => refreshGitStatus()}
+              onWorkspaceReady={handleWorkspaceReady}
               onCodeSuggestion={(code) => {
                 if (currentFile) editorRef.current?.insertAtCursor(code);
               }}

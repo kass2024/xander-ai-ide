@@ -218,7 +218,7 @@ export function AgentsPanel({ projectPath, onOpenAgent, onNewAgentWindow }: Agen
               ))}
             </div>
             {!projectPath && (
-              <div className="text-[11px] text-yellow-500 mb-3">Open a project folder for full agent capabilities.</div>
+              <div className="text-[11px] text-yellow-500 mb-3">Agent will restore your last folder or ask you to pick one when you start a task.</div>
             )}
             <button
               onClick={() => handleNew(newMode, newTitle.trim() || undefined)}

@@ -10,6 +10,15 @@ const IGNORED_DIRS = new Set([
 
 const IGNORED_FILES = new Set(['.env', '.env.local', '.env.production']);
 
+const extToLang: Record<string, string> = {
+  ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript', mjs: 'javascript',
+  py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java', kt: 'kotlin', kts: 'kotlin',
+  cs: 'csharp', cpp: 'cpp', cc: 'cpp', c: 'c', h: 'c', hpp: 'cpp',
+  php: 'php', swift: 'swift', sql: 'sql',
+  vue: 'vue', svelte: 'svelte', dart: 'dart', lua: 'lua', r: 'r', scala: 'scala',
+  md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+};
+
 export type DetectedStack =
   | 'laravel'
   | 'php'
@@ -20,7 +29,12 @@ export type DetectedStack =
   | 'electron'
   | 'python'
   | 'mysql'
-  | 'typescript';
+  | 'typescript'
+  | 'go'
+  | 'rust'
+  | 'ruby'
+  | 'java'
+  | 'prisma';
 
 export interface ProjectAnalysis {
   rootPath: string;
@@ -74,6 +88,7 @@ export async function analyzeProject(projectPath: string): Promise<ProjectAnalys
   }
 
   const markers: Record<string, boolean> = {};
+  const langCounts: Record<string, number> = {};
 
   for (const f of walk.files) {
     const parts = f.path.replace(/\\/g, '/').split('/');
@@ -109,6 +124,21 @@ export async function analyzeProject(projectPath: string): Promise<ProjectAnalys
     check('next.config.ts', 'next.config.ts');
     check('requirements.txt', 'requirements.txt');
     check('manage.py', 'manage.py');
+    check('go.mod', 'go.mod');
+    check('Cargo.toml', 'Cargo.toml');
+    check('Gemfile', 'Gemfile');
+    check('pom.xml', 'pom.xml');
+    check('build.gradle', 'build.gradle');
+    check('build.gradle.kts', 'build.gradle.kts');
+    check('CMakeLists.txt', 'CMakeLists.txt');
+    check('Package.swift', 'Package.swift');
+    check('schema.prisma', 'prisma/schema.prisma');
+
+    const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() : '';
+    if (ext) {
+      const lang = extToLang[ext];
+      if (lang) langCounts[lang] = (langCounts[lang] || 0) + 1;
+    }
 
     if (r.includes('/routes/') || r.includes('\\routes\\')) markers.routes = true;
     if (r.includes('/Controllers/') || r.includes('/controllers/')) markers.controllers = true;
@@ -153,6 +183,11 @@ export async function analyzeProject(projectPath: string): Promise<ProjectAnalys
     if (markers['tsconfig']) stacks.add('typescript');
   }
   if (markers['requirements.txt'] || markers['manage.py']) stacks.add('python');
+  if (markers['go.mod']) stacks.add('go');
+  if (markers['Cargo.toml']) stacks.add('rust');
+  if (markers['Gemfile']) stacks.add('ruby');
+  if (markers['pom.xml'] || markers['build.gradle'] || markers['build.gradle.kts']) stacks.add('java');
+  if (markers['schema.prisma']) stacks.add('prisma');
 
   const dbHints = walk.files.some((f) =>
     /\.sql$|database\.php|\.env\.example|schema\.prisma/i.test(f.path),
@@ -160,11 +195,17 @@ export async function analyzeProject(projectPath: string): Promise<ProjectAnalys
   if (dbHints) stacks.add('mysql');
 
   const stackList = [...stacks];
+  const topLangs = Object.entries(langCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([l, n]) => `${l}(${n})`)
+    .join(', ');
   const parts: string[] = [
     `Root: ${projectPath}`,
     `Files: ${fileCount}, directories: ${dirCount}`,
     stackList.length ? `Stacks: ${stackList.join(', ')}` : 'Stacks: (generic)',
   ];
+  if (topLangs) parts.push(`Languages by extension: ${topLangs}`);
   if (importantFiles.length) {
     parts.push(`Key files:\n${importantFiles.slice(0, 25).map((f) => `  - ${f}`).join('\n')}`);
   }

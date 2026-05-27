@@ -108,13 +108,20 @@ export class MultiModelService {
       switch (agentMode) {
         case 'fast':
           if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
-          return { provider: 'openai', model: defaults.fast };
+          if (this.openai) return { provider: 'openai', model: defaults.fast };
+          if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+          break;
         case 'deep':
         case 'refactor':
           if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
           if (this.openai) return { provider: 'openai', model: defaults.agent };
+          if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
           break;
+        case 'standard':
         default:
+          if (this.openai) return { provider: 'openai', model: defaults.agent };
+          if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+          if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
           break;
       }
     }

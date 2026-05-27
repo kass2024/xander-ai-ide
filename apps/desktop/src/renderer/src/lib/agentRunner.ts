@@ -8,6 +8,7 @@ import { useTaskStore } from '../stores/taskStore';
 import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
 import { clearBackups } from './patchUtils';
 import type { AgentMode } from '../stores/agentStateStore';
+import { ensureWorkspace, WorkspaceCancelledError } from './workspaceManager';
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -58,7 +59,17 @@ export interface AgentRunResult {
   cancelled?: boolean;
 }
 
-const MAX_STEPS = 40;
+function maxStepsForMode(mode: AgentMode): number {
+  switch (mode) {
+    case 'deep':
+    case 'refactor':
+      return 50;
+    case 'fast':
+      return 25;
+    default:
+      return 40;
+  }
+}
 
 const TOOL_ACTIVITY: Record<string, (args: Record<string, unknown>) => string> = {
   read_file: (a) => `Reading ${String(a.path || '').split(/[/\\]/).pop() || 'file'}...`,
@@ -69,6 +80,11 @@ const TOOL_ACTIVITY: Record<string, (args: Record<string, unknown>) => string> =
   grep: (a) => `Grep: "${String(a.pattern || '').slice(0, 60)}"...`,
   semantic_search: (a) => `Semantic search: "${String(a.query || '').slice(0, 60)}"...`,
   analyze_project: () => 'Analyzing project structure...',
+  inspect_database: () => 'Inspecting database config...',
+  walk_project_files: () => 'Listing project files...',
+  git_commit: (a) => `Committing: ${String(a.message || '').slice(0, 50)}...`,
+  git_push: () => 'Pushing to remote...',
+  git_pull: () => 'Pulling from remote...',
   write_file: (a) => `Editing ${String(a.path || 'file').split(/[/\\]/).pop()}...`,
   edit_file: (a) => `Patching ${String(a.path || 'file').split(/[/\\]/).pop()}...`,
   create_file: (a) => `Creating ${String(a.path || 'file').split(/[/\\]/).pop()}...`,
@@ -168,16 +184,17 @@ export async function runAgent(options: {
 }): Promise<AgentRunResult> {
   const {
     prompt,
-    context,
     images,
     onProgress,
     onFileChanged,
     onRefreshGit,
     onRefreshExplorer,
   } = options;
+  let context = options.context;
 
   const agentMode = options.agentMode ?? useAgentStateStore.getState().mode;
   const model = resolveModelForMode(options.model, agentMode);
+  const MAX_STEPS = maxStepsForMode(agentMode);
 
   const stateStore = useAgentStateStore.getState();
   stateStore.clearCancel();
@@ -194,16 +211,30 @@ export async function runAgent(options: {
   let stepsUsed = 0;
   let cancelled = false;
 
-  if (!context.repositoryPath) {
-    stateStore.setPhase('failed');
-    throw new Error('Open a project folder first — Agent needs access to your workspace.');
+  let repositoryPath = context.repositoryPath;
+  if (!repositoryPath) {
+    onProgress?.({ type: 'activity', message: 'Selecting project folder...' });
+    try {
+      repositoryPath = await ensureWorkspace();
+      context = {
+        ...context,
+        repositoryPath,
+        workspaceFolders: context.workspaceFolders?.length
+          ? context.workspaceFolders
+          : [repositoryPath],
+      };
+    } catch (e) {
+      stateStore.setPhase('failed');
+      if (e instanceof WorkspaceCancelledError) {
+        throw new Error('Pick a project folder to run Agent (File → Open Folder or retry).');
+      }
+      throw e;
+    }
   }
 
-  if (context.repositoryPath) {
-    clearBackups(context.repositoryPath);
-  }
+  clearBackups(repositoryPath);
 
-  const taskId = useTaskStore.getState().startTask(context.repositoryPath!, prompt);
+  const taskId = useTaskStore.getState().startTask(repositoryPath, prompt);
   const addTaskCard = (title: string, status: 'pending' | 'running' | 'success' | 'failed', detail?: string) => {
     const cardId = useTaskStore.getState().addCard(taskId, { title, status, detail });
     onProgress?.({ type: 'task_card', cardTitle: title, cardStatus: status, message: detail });
@@ -215,9 +246,9 @@ export async function runAgent(options: {
 
   // Enrich context with project analysis on first run
   let projectSummary = context.projectSummary;
-  if (!projectSummary && context.repositoryPath) {
+  if (!projectSummary && repositoryPath) {
     try {
-      const analysis = await analyzeProject(context.repositoryPath);
+      const analysis = await analyzeProject(repositoryPath);
       projectSummary = formatAnalysisForAgent(analysis);
       const cardId = addTaskCard('Analyzing project', 'running');
       useTaskStore.getState().updateCard(taskId, cardId, { status: 'success', detail: `${analysis.fileCount} files` });
@@ -320,21 +351,21 @@ export async function runAgent(options: {
         let originalContent = '';
 
         if (toolName === 'write_file' || toolName === 'create_file' || toolName === 'edit_file') {
-          originalContent = filePath ? await readOriginalContent(context.repositoryPath, filePath) : '';
+          originalContent = filePath ? await readOriginalContent(repositoryPath, filePath) : '';
         }
 
         if (APPROVAL_TOOLS.has(toolName)) {
           onProgress?.({ type: 'approval_needed', toolName, message: `Waiting for approval: ${toolName}` });
-          const approved = await requestToolApproval(tc, context.repositoryPath);
+          const approved = await requestToolApproval(tc, repositoryPath);
           if (!approved) {
             result = { tool_call_id: tc.id, content: 'User rejected this action.', success: false };
           } else {
-            result = await executeToolCall(tc, context.repositoryPath);
+            result = await executeToolCall(tc, repositoryPath);
           }
         } else if (AUTO_TOOLS.has(toolName)) {
-          result = await executeToolCall(tc, context.repositoryPath);
+          result = await executeToolCall(tc, repositoryPath);
         } else {
-          result = await executeToolCall(tc, context.repositoryPath);
+          result = await executeToolCall(tc, repositoryPath);
         }
 
         useTaskStore.getState().updateCard(taskId, cardId, {
@@ -362,7 +393,7 @@ export async function runAgent(options: {
           onRefreshGit?.();
           let newContent = String(args.content ?? '');
           if (toolName === 'edit_file') {
-            newContent = await readOriginalContent(context.repositoryPath, filePath);
+            newContent = await readOriginalContent(repositoryPath, filePath);
           }
           onProgress?.({
             type: 'file_edit',
@@ -374,6 +405,10 @@ export async function runAgent(options: {
 
         if (result.success && filePath && (toolName === 'read_file' || toolName === 'list_files' || toolName === 'list_directory')) {
           onProgress?.({ type: 'explored', path: filePath });
+        }
+
+        if (result.success && (toolName === 'git_commit' || toolName === 'git_push' || toolName === 'git_pull')) {
+          onRefreshGit?.();
         }
 
         if (toolName === 'run_terminal' || toolName === 'build_project' || toolName === 'test_project' || toolName === 'lint_project') {

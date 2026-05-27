@@ -31,6 +31,7 @@ import {
   clipboardItemToAttachment,
   fileToImageAttachment,
 } from '../../lib/imageAttachment';
+import { ensureWorkspace, WorkspaceCancelledError } from '../../lib/workspaceManager';
 
 interface AgentInteractivePanelProps {
   projectPath: string | null;
@@ -49,6 +50,7 @@ interface AgentInteractivePanelProps {
   onRunTerminal?: (command: string) => void;
   onRefreshGit?: () => void;
   onRefreshExplorer?: () => void;
+  onWorkspaceReady?: (path: string) => void;
 }
 
 function DiffBlock({ block, onToggle }: { block: AgentBlock; onToggle: () => void }) {
@@ -250,6 +252,7 @@ export function AgentInteractivePanel({
   onRunTerminal,
   onRefreshGit,
   onRefreshExplorer,
+  onWorkspaceReady,
 }: AgentInteractivePanelProps) {
   const { sessions, addMessage, updateSession, createSession, setActiveSession } = useAgentStore();
   const {
@@ -375,8 +378,16 @@ export function AgentInteractivePanel({
       addError('Sign in via Settings → General to use Agent.');
       return;
     }
-    if (!projectPath) {
-      addError('Open a project folder first (File → Open Folder).');
+    let workspace = projectPath;
+    try {
+      workspace = await ensureWorkspace({
+        onOpened: (p) => {
+          onWorkspaceReady?.(p);
+        },
+      });
+    } catch (e) {
+      if (e instanceof WorkspaceCancelledError) return;
+      addError(e instanceof Error ? e.message : 'Could not open project folder');
       return;
     }
 
@@ -390,8 +401,8 @@ export function AgentInteractivePanel({
 
     try {
       const context = await buildRichContext({
-        projectPath,
-        workspaceFolders,
+        projectPath: workspace,
+        workspaceFolders: workspaceFolders.length ? workspaceFolders : [workspace],
         currentFilePath,
         selectedCode,
         openFiles,

@@ -1,5 +1,6 @@
 import { resolvePath } from './projectContext';
 import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
+import { inspectDatabase } from './inspectDatabase';
 import { applyPatch, snapshotBeforeEdit } from './patchUtils';
 import {
   detectDbStack,
@@ -380,6 +381,102 @@ export async function executeToolCall(
         };
       }
 
+      case 'git_commit': {
+        if (!projectPath) {
+          return { tool_call_id: toolCall.id, content: 'No project open', success: false };
+        }
+        const message = String(args.message || 'chore: agent changes');
+        if (args.stage_all !== false) {
+          const st = await api.gitStatus(projectPath);
+          if (st.success && st.status?.files?.length) {
+            const paths = st.status.files.map((f: { path: string }) => f.path);
+            await api.gitAdd(projectPath, paths);
+          } else {
+            await api.gitAdd(projectPath, ['.']);
+          }
+        } else if (Array.isArray(args.files) && args.files.length) {
+          await api.gitAdd(projectPath, args.files.map(String));
+        }
+        const result = await api.gitCommit(projectPath, message);
+        if (!result.success) {
+          return { tool_call_id: toolCall.id, content: `Git commit failed: ${result.error}`, success: false };
+        }
+        return {
+          tool_call_id: toolCall.id,
+          content: `Committed: ${message}`,
+          success: true,
+        };
+      }
+
+      case 'git_push': {
+        if (!projectPath) {
+          return { tool_call_id: toolCall.id, content: 'No project open', success: false };
+        }
+        const branch = args.branch ? String(args.branch) : undefined;
+        const result = await api.gitPush(projectPath, branch);
+        if (!result.success) {
+          return { tool_call_id: toolCall.id, content: `Git push failed: ${result.error}`, success: false };
+        }
+        return {
+          tool_call_id: toolCall.id,
+          content: `Pushed to origin${branch ? ` (${branch})` : ''}`,
+          success: true,
+        };
+      }
+
+      case 'git_pull': {
+        if (!projectPath) {
+          return { tool_call_id: toolCall.id, content: 'No project open', success: false };
+        }
+        const branch = args.branch ? String(args.branch) : undefined;
+        const result = await api.gitPull(projectPath, branch);
+        if (!result.success) {
+          return { tool_call_id: toolCall.id, content: `Git pull failed: ${result.error}`, success: false };
+        }
+        return {
+          tool_call_id: toolCall.id,
+          content: `Pulled from origin${branch ? ` (${branch})` : ''}`,
+          success: true,
+        };
+      }
+
+      case 'inspect_database': {
+        if (!projectPath) {
+          return { tool_call_id: toolCall.id, content: 'No project open', success: false };
+        }
+        const report = await inspectDatabase(projectPath);
+        return {
+          tool_call_id: toolCall.id,
+          content: truncate(report),
+          success: true,
+        };
+      }
+
+      case 'walk_project_files': {
+        if (!projectPath) {
+          return { tool_call_id: toolCall.id, content: 'No project open', success: false };
+        }
+        const offset = Math.max(0, Number(args.offset) || 0);
+        const maxFiles = Math.min(80, Math.max(1, Number(args.max_files) || 40));
+        const extFilter = args.extension ? String(args.extension).toLowerCase().replace(/^\./, '') : '';
+        const walk = await api.walkProjectFiles(projectPath);
+        if (!walk.success || !walk.files) {
+          return { tool_call_id: toolCall.id, content: 'Could not walk project', success: false };
+        }
+        let files = walk.files.filter((f) => !f.isDirectory);
+        if (extFilter) {
+          files = files.filter((f) => f.name.toLowerCase().endsWith(`.${extFilter}`));
+        }
+        const total = files.length;
+        const slice = files.slice(offset, offset + maxFiles);
+        const listing = slice.map((f) => f.path.replace(/\\/g, '/')).join('\n');
+        return {
+          tool_call_id: toolCall.id,
+          content: `Total matching files: ${total}\nShowing ${offset + 1}-${offset + slice.length}:\n${listing || '(none)'}\n\nUse read_file on paths for deep inspection. Next page: offset=${offset + maxFiles}`,
+          success: true,
+        };
+      }
+
       default:
         return {
           tool_call_id: toolCall.id,
@@ -406,6 +503,8 @@ export const AUTO_TOOLS = new Set([
   'grep',
   'semantic_search',
   'analyze_project',
+  'inspect_database',
+  'walk_project_files',
   'git_status',
   'git_diff',
   'create_file',
@@ -428,4 +527,5 @@ export const APPROVAL_TOOLS = new Set([
   'rename_file',
   'git_commit',
   'git_push',
+  'git_pull',
 ]);

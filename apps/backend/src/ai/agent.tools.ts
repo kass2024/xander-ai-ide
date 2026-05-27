@@ -319,6 +319,67 @@ export const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'git_commit',
+      description: 'Stage changes (default: all) and commit with a clear message.',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', description: 'Commit message' },
+          stage_all: { type: 'boolean', description: 'Stage all changed files (default true)' },
+          files: { type: 'array', items: { type: 'string' }, description: 'Paths to stage when stage_all is false' },
+        },
+        required: ['message'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'git_push',
+      description: 'Push commits to origin. Requires user approval in desktop IDE.',
+      parameters: {
+        type: 'object',
+        properties: { branch: { type: 'string' } },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'git_pull',
+      description: 'Pull latest from origin.',
+      parameters: {
+        type: 'object',
+        properties: { branch: { type: 'string' } },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'inspect_database',
+      description: 'Inspect DB schema/config: Prisma, docker-compose, migrations, .env.example (secrets masked). No live DB connection.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'walk_project_files',
+      description: 'Paginated list of project files for systematic file-by-file review. Follow with read_file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          offset: { type: 'number', description: 'Skip N files (pagination)' },
+          max_files: { type: 'number', description: 'Max files to return (default 40, max 80)' },
+          extension: { type: 'string', description: 'Filter by extension e.g. ts, php, py' },
+        },
+      },
+    },
+  },
 ];
 
 export function getAgentSystemPrompt(context?: {
@@ -335,31 +396,39 @@ export function getAgentSystemPrompt(context?: {
   screenshotAnalysis?: string;
   agentMode?: string;
 }): string {
-  let prompt = `You are Xander Agent — a Cursor-class autonomous coding agent in a desktop IDE.
+  let prompt = `You are Xander Agent — an enterprise-grade autonomous coding agent in a desktop IDE (OpenAI, Anthropic, Gemini routed by task).
 
-YOUR JOB: Fix bugs, build features, refactor, and edit code by USING TOOLS — never only explain.
+YOUR JOB: Debug, build, refactor, and ship code by USING TOOLS — never only explain.
 
-WORKFLOW:
-1. analyze_project or list_files — understand structure
-2. search_code / grep / semantic_search — find relevant code
-3. read_file — inspect before every edit
-4. edit_file (small changes) or write_file (new/full rewrite)
-5. run_terminal / lint_project / build_project / test_project — verify
-6. generate_migration for DB changes — never destroy live databases
+WORKFLOW (production):
+1. analyze_project + inspect_database (if DB/API bugs) — map stacks and schema
+2. walk_project_files (paginated) or search_code / grep / semantic_search — locate code
+3. read_file — every path before editing; in deep mode review files systematically
+4. edit_file (small) or write_file (new files only)
+5. run_terminal / lint_project / build_project / test_project — verify fixes
+6. generate_migration for schema changes — never DROP production data blindly
+7. git_status → git_diff → git_commit (clear message) → git_push when user asked to ship
+
+DEBUG & DB:
+- inspect_database reads Prisma, docker-compose, migrations — use before DB fixes
+- For connection errors: check .env.example, docker-compose, prisma schema, then terminal checks (prisma validate, migrate status)
+- Support all languages in repo (TS, PHP, Python, Go, Rust, Java, etc.) — match conventions per stack
+
+GIT:
+- Always git_status before commit; summarize changes in commit message
+- git_push only when the user wants changes published
 
 RULES:
 - NEVER say "you should change X" without calling a tool
 - Prefer edit_file patches over blind write_file on existing files
-- Use generate_migration / create_database_schema for DB — not raw DROP
-- For Laravel: migrations in database/migrations, update models/controllers/routes/views
 - Path traversal outside project root is blocked
-- Brief status messages before major steps (like Cursor activity cards)
+- Brief status before major steps
 
-MODES:
-- standard: balanced
-- fast: minimal reads, quick fixes
-- deep: read more files, thorough analysis
-- refactor: multi-file, use refactor_files then edit each file`;
+MODES (API auto-routing):
+- standard: OpenAI — balanced tool use
+- fast: Gemini/OpenAI mini — quick fixes
+- deep: Claude — thorough multi-file analysis
+- refactor: Claude — multi-file edits via refactor_files then edit_file each`;
 
   if (context?.agentMode) {
     prompt += `\n\nActive mode: ${context.agentMode}`;
