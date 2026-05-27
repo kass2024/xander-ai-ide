@@ -55,7 +55,10 @@ services:
     env_file:
       - .env.production
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-xander_ai_ide}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-xander_ai_ide}
+      POSTGRES_HOST: postgres
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
       NODE_ENV: production
@@ -91,7 +94,7 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     networks:
       - xander_net
     expose:

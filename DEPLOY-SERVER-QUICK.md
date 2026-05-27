@@ -86,6 +86,21 @@ Common causes:
 | `prisma migrate deploy failed` | `POSTGRES_PASSWORD` in `.env.production` must match the password in `DATABASE_URL`; use host `postgres`, not `localhost` |
 | Password with `@` `#` `%` | URL-encode the password in `DATABASE_URL` or use alphanumeric-only passwords |
 | Container exits before Nest | Check migrate logs above; ensure `JWT_SECRET` is set |
+| `POSTGRES_PASSWORD` changed after first deploy | Postgres volume keeps old password — reset volume or revert password |
+| `password authentication failed` | `POSTGRES_PASSWORD` in `.env.production` must match what postgres was created with |
+
+```bash
+chmod +x scripts/vps-backend-logs.sh
+./scripts/vps-backend-logs.sh
+```
+
+**Reset DB only if fresh start is OK (deletes all data):**
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production down
+docker volume rm xander-ai-ide_xander_postgres_data
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
 
 After `git pull`, rebuild backend only:
 
