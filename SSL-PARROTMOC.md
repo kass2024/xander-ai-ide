@@ -10,7 +10,16 @@ VPS IP: **66.29.135.120**
 | `www` | A | `66.29.135.120` |
 | `api` | A | `66.29.135.120` |
 
-Check: `dig +short parrotmoc.online` → `66.29.135.120`
+Check both resolve to your VPS:
+
+```bash
+dig +short parrotmoc.online
+dig +short api.parrotmoc.online
+```
+
+If `api` is empty, add the **api** A record at your registrar (API will not work until then).
+
+Temporary backend check via main domain: `curl -s http://parrotmoc.online/api-health`
 
 ## 2. Pull + fix nginx (port 443 restart loop)
 
