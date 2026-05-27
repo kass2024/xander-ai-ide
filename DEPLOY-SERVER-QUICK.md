@@ -27,7 +27,9 @@ git clone https://github.com/kass2024/xander-ai-ide.git   # first time only
 cd xander-ai-ide
 
 cp .env.production.example .env.production
-nano .env.production   # see required vars below
+# Or apply defaults in one step:
+chmod +x scripts/init-env-production.sh && ./scripts/init-env-production.sh
+nano .env.production   # change defaults before production traffic
 
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
@@ -35,8 +37,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 ## Required `.env.production`
 
 ```env
-POSTGRES_PASSWORD=strong_password
-JWT_SECRET=openssl_rand_base64_48
+POSTGRES_PASSWORD=change_this_strong_password
+JWT_SECRET=change_this_jwt_secret
 
 OPENAI_API_KEY=sk-...
 STRIPE_SECRET_KEY=sk_live_...

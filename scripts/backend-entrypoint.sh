@@ -4,14 +4,12 @@ set -e
 echo "==> Xander AI IDE Backend — starting"
 echo "==> NODE_ENV=${NODE_ENV:-unset} PORT=${PORT:-3001}"
 
-if [ -z "$JWT_SECRET" ]; then
-  echo "ERROR: JWT_SECRET is not set. Add it to .env.production (openssl rand -base64 48)"
-  exit 1
-fi
+: "${POSTGRES_PASSWORD:=change_this_strong_password}"
+: "${JWT_SECRET:=change_this_jwt_secret}"
+export POSTGRES_PASSWORD JWT_SECRET
 
-if [ -z "$POSTGRES_PASSWORD" ]; then
-  echo "ERROR: POSTGRES_PASSWORD is not set in .env.production"
-  exit 1
+if [ "$POSTGRES_PASSWORD" = "change_this_strong_password" ] || [ "$JWT_SECRET" = "change_this_jwt_secret" ]; then
+  echo "WARN: Using default POSTGRES_PASSWORD / JWT_SECRET — change these in .env.production before going live"
 fi
 
 export DATABASE_URL="$(node /app/build-database-url.cjs)"
