@@ -58,7 +58,8 @@ cd /opt && git clone https://github.com/kass2024/xander-ai-ide.git && cd xander-
 cp .env.production.example .env.production
 nano .env.production   # passwords, keys, parrotmoc.online URLs
 
-# 4. Deploy (DB + migrations automatic)
+# 4. Pull latest fix (if build failed before) then deploy
+git pull origin main
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 
 # 5. Wait & verify
