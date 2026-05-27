@@ -24,6 +24,8 @@ Certbot failed on the old domain because **www** and **api** had no DNS (NXDOMAI
 
 ```bash
 cd /opt/xander-ai-ide
+git checkout -- scripts/setup-ssl-parrotmoc.sh scripts/init-env-production.sh 2>/dev/null || true
+git pull origin main
 chmod +x scripts/redeploy-xanderai-vps.sh
 export VPS_IP=66.29.135.120
 export CERTBOT_EMAIL=admin@xanderai.online

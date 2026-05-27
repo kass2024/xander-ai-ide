@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "==> Resetting local edits to repo scripts..."
-git checkout -- scripts/init-env-production.sh 2>/dev/null || true
+git checkout -- scripts/init-env-production.sh scripts/setup-ssl-parrotmoc.sh scripts/setup-ssl.sh 2>/dev/null || true
 
 echo "==> git pull..."
 git pull origin main

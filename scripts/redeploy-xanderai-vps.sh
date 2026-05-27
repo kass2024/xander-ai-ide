@@ -11,7 +11,8 @@ VPS_IP="${VPS_IP:-66.29.135.120}"
 echo "==> Xander AI IDE — redeploy for $DOMAIN"
 echo "==> Expected VPS IP: $VPS_IP"
 
-git checkout -- scripts/init-env-production.sh 2>/dev/null || true
+echo "==> Resetting local edits to tracked files..."
+git checkout -- scripts/init-env-production.sh scripts/setup-ssl-parrotmoc.sh scripts/setup-ssl.sh 2>/dev/null || true
 git pull origin main
 
 chmod +x scripts/init-env-production.sh scripts/setup-ssl.sh scripts/vps-diagnose-api.sh scripts/vps-update.sh
