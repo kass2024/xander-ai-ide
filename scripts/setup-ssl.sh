@@ -18,16 +18,22 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> DNS check (all must resolve to this VPS)..."
+echo "==> DNS check..."
 for host in "$DOMAIN" "www.$DOMAIN" "$API_DOMAIN"; do
   ip=$(dig +short "$host" A 2>/dev/null | head -1)
   if [ -z "$ip" ]; then
-    echo "ERROR: No A record for $host — add it at your registrar before SSL."
+    cname=$(dig +short "$host" CNAME 2>/dev/null | head -1)
+    if [ -n "$cname" ]; then
+      ip=$(dig +short "${cname%.}" A 2>/dev/null | head -1)
+    fi
+  fi
+  if [ -z "$ip" ]; then
+    echo "ERROR: No DNS for $host — add A (or CNAME) before SSL."
     exit 1
   fi
   echo "    $host -> $ip"
   if [ -n "$VPS_IP" ] && [ "$ip" != "$VPS_IP" ]; then
-    echo "WARN: $host points to $ip (expected $VPS_IP)"
+    echo "WARN: $host resolves to $ip (expected $VPS_IP) — OK if CNAME to apex"
   fi
 done
 
@@ -96,6 +102,14 @@ else
 fi
 
 docker compose -f docker-compose.prod.yml -f docker-compose.ssl.yml --env-file "$ENV_FILE" up -d --force-recreate nginx
+
+sleep 3
+NGINX_STATUS=$(docker inspect xander_nginx --format '{{.State.Status}}' 2>/dev/null || echo missing)
+if [ "$NGINX_STATUS" != "running" ]; then
+  echo "ERROR: nginx not running after HTTPS enable. Logs:"
+  docker logs xander_nginx --tail 30 2>&1 || true
+  exit 1
+fi
 docker exec xander_nginx nginx -t
 
 echo ""

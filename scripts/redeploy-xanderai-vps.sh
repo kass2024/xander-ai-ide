@@ -43,9 +43,10 @@ docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" build --no-cach
 echo "==> Start stack (HTTP)..."
 docker compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d --force-recreate
 
-echo "==> Verify HTTP..."
-curl -sf -H "Host: $API_DOMAIN" http://127.0.0.1/health || echo "WARN: API via nginx failed"
-curl -sf "http://$DOMAIN/api-health" 2>/dev/null || echo "WARN: api-health failed (DNS may not propagate yet)"
+echo "==> Verify HTTP (wait for backend)..."
+sleep 15
+curl -sf -H "Host: $API_DOMAIN" http://127.0.0.1/health && echo "" || echo "WARN: API via nginx failed"
+curl -sf "http://127.0.0.1/api-health" -H "Host: $DOMAIN" && echo "" || echo "WARN: api-health failed"
 
 echo "==> SSL (requires DNS for @, www, api)..."
 ./scripts/setup-ssl.sh
