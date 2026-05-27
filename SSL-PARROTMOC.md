@@ -16,7 +16,9 @@ Check: `dig +short parrotmoc.online` → `66.29.135.120`
 
 ```bash
 cd /opt/xander-ai-ide
-git pull origin main
+chmod +x scripts/vps-update.sh
+./scripts/vps-update.sh
+# Or manually: git checkout -- scripts/init-env-production.sh && git pull origin main
 
 # Stop host nginx/apache using ports 80/443
 sudo systemctl stop nginx apache2 2>/dev/null
