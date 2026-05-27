@@ -102,7 +102,7 @@ export interface AgentStepResponse {
 
 @Injectable()
 export class AiService {
-  private openai: OpenAI;
+  private openai: OpenAI | null = null;
 
   constructor(
     private configService: ConfigService,
@@ -113,10 +113,16 @@ export class AiService {
     private multiModel: MultiModelService,
   ) {
     const apiKey = normalizeOpenAIKey(this.configService.get<string>('OPENAI_API_KEY'));
-    if (!apiKey) {
-      throw new Error('OPENAI_API_KEY is not configured');
+    if (apiKey) {
+      this.openai = new OpenAI({ apiKey });
     }
-    this.openai = new OpenAI({ apiKey });
+  }
+
+  private requireOpenAI(): OpenAI {
+    if (!this.openai) {
+      throw new BadRequestException('OPENAI_API_KEY is not configured');
+    }
+    return this.openai;
   }
 
   private getDefaultModels() {
@@ -143,7 +149,7 @@ export class AiService {
     let lastError: unknown;
     for (const candidate of getModelFallbacks(model)) {
       try {
-        return await this.openai.chat.completions.create({
+        return await this.requireOpenAI().chat.completions.create({
           model: candidate,
           messages,
           max_tokens: maxTokens,

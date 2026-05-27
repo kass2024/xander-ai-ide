@@ -72,10 +72,11 @@ services:
     expose:
       - '3001'
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
-      interval: 30s
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health/live']
+      interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 120s
 
   web:
     build:

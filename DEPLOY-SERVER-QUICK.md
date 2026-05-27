@@ -69,7 +69,29 @@ RUN_SEED=true
 curl http://api.parrotmoc.online/health
 curl http://parrotmoc.online
 docker compose -f docker-compose.prod.yml ps
-docker logs xander_backend --tail 30
+docker logs xander_backend --tail 50
+```
+
+## Backend unhealthy
+
+```bash
+docker logs xander_backend --tail 80
+```
+
+Common causes:
+
+| Log message | Fix |
+|-------------|-----|
+| `OPENAI_API_KEY is not configured` | Set `OPENAI_API_KEY` in `.env.production` (API starts without it after update; AI routes need the key) |
+| `prisma migrate deploy failed` | `POSTGRES_PASSWORD` in `.env.production` must match the password in `DATABASE_URL`; use host `postgres`, not `localhost` |
+| Password with `@` `#` `%` | URL-encode the password in `DATABASE_URL` or use alphanumeric-only passwords |
+| Container exits before Nest | Check migrate logs above; ensure `JWT_SECRET` is set |
+
+After `git pull`, rebuild backend only:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production build --no-cache backend
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
 ## Update after git push

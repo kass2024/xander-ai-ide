@@ -41,4 +41,7 @@ async function bootstrap() {
   console.log(`💳 Stripe webhook: POST http://localhost:${port}/billing/webhook`);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error('Failed to start backend:', err);
+  process.exit(1);
+});

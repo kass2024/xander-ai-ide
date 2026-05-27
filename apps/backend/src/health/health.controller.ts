@@ -9,6 +9,16 @@ export class HealthController {
     private redis: RedisService,
   ) {}
 
+  /** Liveness probe — no DB/Redis; used by Docker healthcheck */
+  @Get('live')
+  live() {
+    return {
+      status: 'alive',
+      timestamp: new Date().toISOString(),
+      service: 'xander-ai-ide-backend',
+    };
+  }
+
   @Get()
   async check() {
     let db = false;
