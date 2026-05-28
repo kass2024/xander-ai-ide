@@ -182,7 +182,7 @@ export class AiController {
     multiModel: boolean;
     agentClaude: boolean;
     providers: { openai: boolean; anthropic: boolean; google: boolean };
-    defaultRouting: { agent: string; composer: string; project_builder: string; repo_analysis: string };
+    defaultRouting: { agent: string; composer: string; project_builder: string; ui_tasks: string; repo_analysis: string };
   } {
     const providers = this.multiModel.getProvidersStatus();
     const defaults = this.multiModel.getDefaultModels();
