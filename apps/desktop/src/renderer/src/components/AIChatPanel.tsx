@@ -11,6 +11,8 @@ import { GenerationProgressPanel, runProjectBuilder, runComposerStream } from '.
 import { AgentInteractivePanel } from './agent/AgentInteractivePanel';
 import { sanitizeModelsForUI, displayModelLabel } from '../lib/modelLabels';
 import { useGenerationStore } from '../stores/generationStore';
+import { useAuthStore } from '../stores/authStore';
+import { resolveModelForPrompt } from '../lib/uiRouting';
 import { isLargeProjectPrompt, streamClient } from '../lib/streamClient';
 import { createProductionStreamHandler } from '../lib/streamActionHandler';
 import { 
@@ -225,9 +227,22 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
     }]);
 
     try {
-      if (!apiClient.getToken()) {
+      if (mode === 'agent' && !apiClient.getToken()) {
+        throw new Error('Sign in via Settings → General to use Agent.');
+      }
+      if (apiClient.getToken()) {
+        await useAuthStore.getState().ensureSession();
+      }
+      if (mode !== 'agent' && !apiClient.getToken()) {
         throw new Error('Sign in via Settings → General to use Xander Assistant.');
       }
+
+      const useProjectBuilder = builderMode || isLargeProjectPrompt(prompt);
+      const effectiveModel = resolveModelForPrompt(selectedModel, prompt, {
+        builder: useProjectBuilder,
+        composer: mode === 'composer' && !builderMode,
+        filePaths: openFiles?.map((f) => f.path),
+      });
 
       if (mode === 'agent') {
         const context = await buildContext(prompt);
@@ -239,7 +254,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
         const result = await runAgent({
           prompt,
           context,
-          model: selectedModel === 'auto' ? undefined : selectedModel,
+          model: effectiveModel,
           conversationId,
           onProgress: (p: AgentProgress) => {
             if (p.type === 'tool_start') {
@@ -278,7 +293,6 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
           ? await gatherComposerFiles(prompt, projectPath, openFiles)
           : [];
 
-        const useProjectBuilder = builderMode || isLargeProjectPrompt(prompt);
         startGeneration();
 
         if (useProjectBuilder) {
@@ -286,7 +300,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
           await runProjectBuilder(
             prompt,
             { ...context, repositoryPath: projectPath },
-            selectedModel === 'auto' ? undefined : selectedModel,
+            effectiveModel,
             projectPath,
             actionCallbacks,
           );
@@ -306,7 +320,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
           await runComposerStream(
             prompt,
             sourceFiles,
-            selectedModel === 'auto' ? undefined : selectedModel,
+            effectiveModel,
             projectPath,
             actionCallbacks,
           );
@@ -332,7 +346,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
           await runProjectBuilder(
             prompt,
             { ...context, repositoryPath: projectPath },
-            selectedModel === 'auto' ? undefined : selectedModel,
+            effectiveModel,
             projectPath,
             actionCallbacks,
           );
@@ -361,7 +375,7 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
         await apiClient.aiChatStream(
           prompt,
           context,
-          selectedModel === 'auto' ? undefined : selectedModel,
+          effectiveModel,
           async (event) => {
             await streamHandler(event as Parameters<typeof streamHandler>[0]);
             if (event.type === 'text_delta' && event.delta) {

@@ -1,4 +1,32 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from './apiConfig';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly invalidateSession: boolean,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+function shouldInvalidateSession(status: number, message: string): boolean {
+  if (status !== 401) return false;
+  const m = message.toLowerCase();
+  if (m.includes('quota') || m.includes('subscription') || m.includes('credits')) {
+    return false;
+  }
+  if (m.includes('invalid credentials') || m.includes('deactivated')) return false;
+  return (
+    m.includes('unauthorized') ||
+    m.includes('jwt') ||
+    m.includes('token') ||
+    m.includes('session') ||
+    m.includes('expired') ||
+    m === 'api error: 401'
+  );
+}
 
 class ApiClient {
   private baseURL: string;
@@ -6,17 +34,41 @@ class ApiClient {
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
+    this.syncTokenFromStorage();
+  }
+
+  syncTokenFromStorage(): void {
     this.token = localStorage.getItem('auth_token');
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  getBaseURL(): string {
+    return this.baseURL;
+  }
+
+  setBaseURL(url: string): void {
+    this.baseURL = url.replace(/\/$/, '');
+  }
+
+  syncBaseURL(): void {
+    this.setBaseURL(getApiBaseUrl());
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}, retried = false): Promise<T> {
+    this.syncTokenFromStorage();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
-    const response = await fetch(`${this.baseURL}${endpoint}`, { ...options, headers });
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseURL}${endpoint}`, { ...options, headers });
+    } catch {
+      throw new Error(
+        `Cannot reach Xander cloud at ${this.baseURL}. Check internet and https://api.xanderai.online/health`,
+      );
+    }
     if (!response.ok) {
       let msg = `API Error: ${response.status}`;
       try {
@@ -26,25 +78,68 @@ class ApiClient {
         else if (typeof raw === 'string') msg = raw;
         else if (raw && typeof raw.message === 'string') msg = raw.message;
       } catch { /* ignore */ }
+
       if (
         response.status === 401 &&
+        !retried &&
+        this.token &&
         !endpoint.startsWith('/auth/login') &&
-        !endpoint.startsWith('/auth/register')
+        !endpoint.startsWith('/auth/refresh')
       ) {
-        msg = 'Sign in via Settings → General to use Xander Assistant.';
-      } else if (response.status === 404 && endpoint.includes('/ai/agent')) {
+        const refreshed = await this.tryRefreshToken();
+        if (refreshed) return this.request(endpoint, options, true);
+      }
+
+      if (response.status === 404 && endpoint.includes('/ai/agent')) {
         msg = 'Agent API not found. Rebuild and restart the backend:\ncd apps\\backend && npm run build && npm run dev';
       } else if (response.status >= 500 && msg === `API Error: ${response.status}`) {
-        msg = 'Backend unavailable. Start the server on http://localhost:3001 and sign in.';
+        msg = `Xander cloud unavailable at ${this.baseURL}. Try again in a moment.`;
       }
-      throw new Error(msg);
+
+      const invalidate = shouldInvalidateSession(response.status, msg);
+      throw new ApiError(msg, response.status, invalidate);
     }
     return response.json();
   }
 
-  setToken(token: string) { this.token = token; localStorage.setItem('auth_token', token); }
-  clearToken() { this.token = null; localStorage.removeItem('auth_token'); }
-  getToken() { return this.token; }
+  /** Refresh JWT without logging the user out (keeps desktop session alive). */
+  async tryRefreshToken(): Promise<boolean> {
+    this.syncTokenFromStorage();
+    if (!this.token) return false;
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      };
+      const res = await fetch(`${this.baseURL}/auth/refresh`, { method: 'POST', headers });
+      if (!res.ok) return false;
+      const data = (await res.json()) as { access_token?: string };
+      if (data.access_token) {
+        this.setToken(data.access_token);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('auth_token', token);
+  }
+  clearToken() {
+    this.token = null;
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('xander_user_cache');
+  }
+  getToken() {
+    this.syncTokenFromStorage();
+    return this.token;
+  }
+  hasValidToken(): boolean {
+    return !!this.getToken();
+  }
 
   async login(email: string, password: string) {
     const result = await this.request<{ access_token: string; user: Record<string, unknown> }>(
@@ -267,5 +362,12 @@ export interface UsageData {
   quota?: { daily: { used: number; limit: number }; weekly: { used: number; limit: number } };
 }
 
-export const apiClient = new ApiClient(API_BASE_URL);
+export const apiClient = new ApiClient(getApiBaseUrl());
+
+export function configureApiClient(): string {
+  const url = getApiBaseUrl();
+  apiClient.setBaseURL(url);
+  return url;
+}
+
 export default apiClient;

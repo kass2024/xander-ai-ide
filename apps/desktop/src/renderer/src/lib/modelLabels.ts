@@ -27,7 +27,7 @@ export function sanitizeModelsForUI(models: ModelOption[]): ModelOption[] {
       ...m,
       name: m.id === 'auto' ? 'Auto' : label,
       description: m.id === 'auto'
-        ? 'Smart routing by task'
+        ? 'Smart routing — Claude for UI, frontend, Builder'
         : 'Balanced quality and speed',
     });
   }

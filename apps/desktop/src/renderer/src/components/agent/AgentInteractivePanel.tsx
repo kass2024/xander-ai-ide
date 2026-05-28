@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   Sparkles,
   ChevronDown,
@@ -9,16 +9,17 @@ import {
   Paperclip,
   Undo2,
   Eye,
-  Brain,
   RotateCcw,
   X,
   Infinity,
   Plus,
   Clock,
   ArrowUp,
+  Square,
 } from 'lucide-react';
 import { displayModelLabel, type ModelOption } from '../../lib/modelLabels';
 import { useAgentRunStore, AgentBlock, getDiffStats } from '../../stores/agentRunStore';
+import { useActionStore } from '../../stores/actionStore';
 import { runAgent, AgentProgress } from '../../lib/agentRunner';
 import { buildRichContext, indexProjectForSearch } from '../../lib/projectContext';
 import { useAgentStore } from '../../stores/agentStore';
@@ -28,10 +29,18 @@ import apiClient from '../../lib/api';
 import {
   ImageAttachment,
   attachmentsForApi,
-  clipboardItemToAttachment,
-  fileToImageAttachment,
+  fileToImageAttachmentFast,
+  encodeAttachmentData,
+  ensureAllAttachmentsEncoded,
+  revokeAttachmentPreview,
 } from '../../lib/imageAttachment';
-import { ensureWorkspace, WorkspaceCancelledError } from '../../lib/workspaceManager';
+import { isMockMode } from '../../lib/providers';
+import { useAgentUiStore } from '../../stores/agentUiStore';
+import { useAuthStore } from '../../stores/authStore';
+import { ApprovalCard } from './ApprovalCard';
+import { DiffViewer } from './DiffViewer';
+import { TerminalOutput } from './TerminalOutput';
+import { ToolCallCard } from './ToolCallCard';
 
 interface AgentInteractivePanelProps {
   projectPath: string | null;
@@ -53,75 +62,43 @@ interface AgentInteractivePanelProps {
   onWorkspaceReady?: (path: string) => void;
 }
 
-function DiffBlock({ block, onToggle }: { block: AgentBlock; onToggle: () => void }) {
-  const diff = getDiffStats(block.originalContent || '', block.newContent || '');
-  const fileName = block.path?.split(/[/\\]/).pop() || block.path;
-  const reverted = block.editStatus === 'reverted';
+export interface AgentInteractivePanelHandle {
+  setPrompt: (text: string, autoSend?: boolean) => void;
+}
 
+function DiffBlock({ block, onToggle }: { block: AgentBlock; onToggle: () => void }) {
   return (
-    <div className={`agent-diff-block ${reverted ? 'opacity-50' : ''}`}>
-      <button type="button" className="agent-diff-header" onClick={onToggle}>
-        <Brain className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
-        <span className="agent-diff-filename">{fileName}</span>
-        <span className="agent-diff-stats">
-          <span className="text-emerald-400">+{diff.added}</span>
-          <span className="text-red-400 ml-1.5">-{diff.removed}</span>
-        </span>
-        {block.expanded ? (
-          <ChevronDown className="w-3.5 h-3.5 ml-auto opacity-50" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-50" />
-        )}
-      </button>
-      {block.expanded && (
-        <div className="agent-diff-body">
-          {diff.hunks.slice(0, 80).map((h, i) => (
-            <div
-              key={i}
-              className={
-                h.type === 'add'
-                  ? 'agent-diff-line agent-diff-add'
-                  : h.type === 'remove'
-                    ? 'agent-diff-line agent-diff-remove'
-                    : 'agent-diff-line agent-diff-same'
-              }
-            >
-              <span className="agent-diff-gutter">{h.newNum ?? h.oldNum ?? ''}</span>
-              <span className="agent-diff-prefix">{h.type === 'add' ? '+' : h.type === 'remove' ? '-' : ' '}</span>
-              <span>{h.line || ' '}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <DiffViewer
+      filePath={block.path || 'file'}
+      oldText={block.originalContent || ''}
+      newText={block.newContent || ''}
+      expanded={block.expanded}
+      onToggle={onToggle}
+      status={block.editStatus === 'reverted' ? 'reverted' : 'applied'}
+    />
   );
 }
 
 function TerminalBlock({ block }: { block: AgentBlock }) {
-  const [open, setOpen] = useState(block.expanded ?? true);
-  const exitCode = block.exitCode ?? (block.success === false ? 1 : 0);
+  const status =
+    block.stepStatus === 'awaiting_approval'
+      ? 'awaiting_approval'
+      : block.stepStatus === 'running'
+        ? 'running'
+        : block.stepStatus === 'skipped'
+          ? 'skipped'
+          : block.success === false
+            ? 'failed'
+            : 'success';
+
   return (
-    <div className="agent-terminal-block">
-      <button type="button" className="agent-terminal-header" onClick={() => setOpen(!open)}>
-        <span className="agent-terminal-prompt">&gt;_</span>
-        <span className="truncate flex-1 text-left font-medium">{block.command}</span>
-        {open ? <ChevronDown className="w-3 h-3 opacity-50" /> : <ChevronRight className="w-3 h-3 opacity-50" />}
-      </button>
-      {open && (
-        <div className="agent-terminal-body">
-          <div className="agent-terminal-meta">
-            <span><strong>Command</strong> {block.command}</span>
-            <span><strong>Exit code</strong> {exitCode}</span>
-          </div>
-          {block.output && (
-            <div className="agent-terminal-section">
-              <div className="agent-terminal-label">STDOUT</div>
-              <pre className="agent-terminal-output">{block.output.slice(0, 3000)}</pre>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <TerminalOutput
+      command={block.command}
+      output={block.output}
+      exitCode={block.exitCode}
+      status={status}
+      expanded={block.expanded ?? true}
+    />
   );
 }
 
@@ -157,9 +134,13 @@ function ExploredBlock({ block }: { block: AgentBlock }) {
 function RenderBlock({
   block,
   onToggleDiff,
+  projectPath,
+  sessionId,
 }: {
   block: AgentBlock;
   onToggleDiff: (id: string) => void;
+  projectPath: string | null;
+  sessionId?: string | null;
 }) {
   switch (block.type) {
     case 'user_prompt':
@@ -177,12 +158,12 @@ function RenderBlock({
           </div>
         </div>
       );
+    case 'tool_step':
+      return <ToolCallCard block={block} />;
+    case 'approval':
+      return <ApprovalCard block={block} projectPath={projectPath} sessionId={sessionId} />;
     case 'activity':
-      return (
-        <div className="agent-activity-line">
-          <span>{block.message}</span>
-        </div>
-      );
+      return null;
     case 'status':
       return (
         <div className="agent-status-line">
@@ -235,7 +216,8 @@ function RenderBlock({
   }
 }
 
-export function AgentInteractivePanel({
+export const AgentInteractivePanel = forwardRef<AgentInteractivePanelHandle, AgentInteractivePanelProps>(
+function AgentInteractivePanel({
   projectPath,
   workspaceFolders = [],
   currentFilePath,
@@ -253,8 +235,9 @@ export function AgentInteractivePanel({
   onRefreshGit,
   onRefreshExplorer,
   onWorkspaceReady,
-}: AgentInteractivePanelProps) {
+}: AgentInteractivePanelProps, ref) {
   const { sessions, addMessage, updateSession, createSession, setActiveSession } = useAgentStore();
+  const ensureSession = useAuthStore((s) => s.ensureSession);
   const {
     blocks,
     isRunning,
@@ -282,6 +265,7 @@ export function AgentInteractivePanel({
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
@@ -292,48 +276,100 @@ export function AgentInteractivePanel({
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendInFlightRef = useRef(false);
+  const blockCountRef = useRef(0);
+  const handleSendRef = useRef<(overridePrompt?: string) => Promise<void>>(async () => {});
+
+  useImperativeHandle(ref, () => ({
+    setPrompt: (text: string, autoSend?: boolean) => {
+      setInput(text);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(text.length, text.length);
+      });
+      if (autoSend) {
+        requestAnimationFrame(() => void handleSend(text));
+      }
+    },
+  }));
 
   useEffect(() => {
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
-  }, [blocks, isRunning]);
+    if (blocks.length === blockCountRef.current) return;
+    blockCountRef.current = blocks.length;
+    requestAnimationFrame(() => {
+      feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
+    });
+  }, [blocks.length]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
+    }, 800);
+    return () => clearInterval(id);
+  }, [isRunning]);
 
   useEffect(() => {
     if (projectPath) indexProjectForSearch(projectPath).catch(() => {});
   }, [projectPath]);
 
-  const addAttachment = useCallback(async (file: File) => {
+  const injectPrompt = useAgentUiStore((s) => s.injectPrompt);
+  const injectSend = useAgentUiStore((s) => s.injectSend);
+  const clearInject = useAgentUiStore((s) => s.clearInject);
+
+  useEffect(() => {
+    if (!injectPrompt) return;
+    const prompt = injectPrompt;
+    const send = injectSend;
+    setInput(prompt);
+    clearInject();
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(prompt.length, prompt.length);
+      if (send) void handleSendRef.current(prompt);
+    });
+  }, [injectPrompt, injectSend, clearInject]);
+
+  const addAttachment = useCallback((file: File) => {
     try {
       setAttachError(null);
-      const att = await fileToImageAttachment(file);
-      setAttachments((prev) => [...prev, att].slice(0, 4));
+      const fast = fileToImageAttachmentFast(file);
+      setAttachments((prev) => [...prev, fast].slice(0, 4));
+      void encodeAttachmentData(file, fast).then((encoded) => {
+        setAttachments((prev) => prev.map((a) => (a.id === fast.id ? encoded : a)));
+      }).catch((err) => {
+        setAttachError(err instanceof Error ? err.message : 'Failed to encode image');
+        setAttachments((prev) => {
+          revokeAttachmentPreview(fast);
+          return prev.filter((a) => a.id !== fast.id);
+        });
+      });
     } catch (err) {
       setAttachError(err instanceof Error ? err.message : 'Failed to attach image');
     }
   }, []);
 
-  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
         const file = item.getAsFile();
-        if (file) await addAttachment(file);
+        if (file) setTimeout(() => addAttachment(file), 0);
         return;
       }
     }
-    if (e.clipboardData.files.length) {
-      const file = e.clipboardData.files[0];
-      if (file.type.startsWith('image/')) {
-        e.preventDefault();
-        await addAttachment(file);
-      }
+    const file = e.clipboardData.files[0];
+    if (file?.type.startsWith('image/')) {
+      e.preventDefault();
+      setTimeout(() => addAttachment(file), 0);
     }
   }, [addAttachment]);
 
   const handleProgress = useCallback((p: AgentProgress) => {
-    if (p.type === 'activity' && p.message) {
-      addActivity(p.message);
+    if (p.type === 'activity') {
+      /* Steps shown via tool_step blocks */
     } else if (p.type === 'thinking') {
       setStatus(p.message || 'Analyzing...', true);
     } else if (p.type === 'screenshot_analysis' && p.content) {
@@ -364,42 +400,78 @@ export function AgentInteractivePanel({
     } else if (p.type === 'error' && p.message) {
       addError(p.message);
     } else if (p.type === 'approval_needed') {
-      setStatus(`Waiting for approval: ${p.toolName}`, true);
+      setStatus(p.message || 'Waiting for your approval…', true);
     }
   }, [
-    setStatus, addActivity, addScreenshotAnalysis, addExplored, addSearch,
+    setStatus, addScreenshotAnalysis, addExplored, addSearch,
     addFileDiff, addTerminal, addText, addError, flushExplored,
     onFileChanged, onRunTerminal,
   ]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isRunning) return;
-    if (!apiClient.getToken()) {
+  const handleSend = async (overridePrompt?: string) => {
+    const promptText = (overridePrompt ?? input).trim();
+    if (!promptText && attachments.length === 0) return;
+    if (!promptText && attachments.length > 0) {
+      setAttachError('Add a message describing what to fix.');
+      return;
+    }
+    if (isRunning || sendInFlightRef.current) return;
+
+    const mock = await isMockMode();
+    if (!mock && !apiClient.getToken()) {
       addError('Sign in via Settings → General to use Agent.');
       return;
     }
-    let workspace = projectPath;
-    try {
-      workspace = await ensureWorkspace({
-        onOpened: (p) => {
-          onWorkspaceReady?.(p);
-        },
-      });
-    } catch (e) {
-      if (e instanceof WorkspaceCancelledError) return;
-      addError(e instanceof Error ? e.message : 'Could not open project folder');
-      return;
-    }
 
-    const prompt = input.trim();
-    const imagePayload = attachmentsForApi(attachments);
-    const imagePreviews = attachments.map((a) => a.previewUrl);
-    setInput('');
-    setAttachments([]);
-    startRun(prompt, imagePreviews.length ? imagePreviews : undefined);
-    if (agentSessionId) addMessage(agentSessionId, { role: 'user', content: prompt });
+    sendInFlightRef.current = true;
+    setIsSending(true);
+    setAttachError(null);
+    let didStartRun = false;
 
     try {
+      void ensureSession();
+
+      let workspace = projectPath;
+      try {
+        workspace = await ensureWorkspace({
+          onOpened: (p) => {
+            onWorkspaceReady?.(p);
+          },
+        });
+      } catch (e) {
+        if (e instanceof WorkspaceCancelledError) return;
+        addError(e instanceof Error ? e.message : 'Could not open project folder');
+        return;
+      }
+
+      let encodedAttachments = attachments;
+      if (attachments.length > 0) {
+        try {
+          encodedAttachments = await ensureAllAttachmentsEncoded(attachments);
+          setAttachments(encodedAttachments);
+        } catch (err) {
+          setAttachError(err instanceof Error ? err.message : 'Failed to process screenshot');
+          return;
+        }
+      }
+
+      const prompt = promptText;
+      const imagePayload = attachmentsForApi(encodedAttachments);
+      const imagePreviews = encodedAttachments.map((a) => a.previewUrl);
+
+      if (!overridePrompt) {
+        setInput('');
+        setAttachments((prev) => {
+          prev.forEach(revokeAttachmentPreview);
+          return [];
+        });
+      }
+
+      useActionStore.getState().clear();
+      startRun(prompt, imagePreviews.length ? imagePreviews : undefined);
+      didStartRun = true;
+      if (agentSessionId) addMessage(agentSessionId, { role: 'user', content: prompt });
+
       const context = await buildRichContext({
         projectPath: workspace,
         workspaceFolders: workspaceFolders.length ? workspaceFolders : [workspace],
@@ -435,11 +507,15 @@ export function AgentInteractivePanel({
     } catch (err) {
       addError(err instanceof Error ? err.message : 'Agent failed');
     } finally {
-      endRun();
+      sendInFlightRef.current = false;
+      setIsSending(false);
+      if (didStartRun) endRun();
       onRefreshGit?.();
       onRefreshExplorer?.();
     }
   };
+
+  handleSendRef.current = handleSend;
 
   const handleUndoAll = async () => {
     if (!projectPath) return;
@@ -503,7 +579,13 @@ export function AgentInteractivePanel({
         )}
 
         {blocks.length > 0 && blocks.map((block) => (
-          <RenderBlock key={block.id} block={block} onToggleDiff={toggleDiff} />
+          <RenderBlock
+            key={block.id}
+            block={block}
+            onToggleDiff={toggleDiff}
+            projectPath={projectPath}
+            sessionId={agentSessionId}
+          />
         ))}
 
         {blocks.length > 0 && isRunning && (
@@ -604,14 +686,14 @@ export function AgentInteractivePanel({
             onChange={(e) => setInput(e.target.value)}
             onPaste={handlePaste}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
-                handleSend();
+                e.stopPropagation();
+                void handleSend();
               }
             }}
             placeholder="Plan, Build, / for commands, @ for context"
             rows={3}
-            disabled={isRunning}
             className="agent-input-textarea cursor-input-textarea"
           />
           <div className="agent-input-toolbar">
@@ -670,42 +752,51 @@ export function AgentInteractivePanel({
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="cursor-icon-btn"
-                title="Attach screenshot"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              {isRunning && (
+              {isRunning ? (
                 <button
                   type="button"
-                  className="cursor-icon-btn text-red-400"
-                  title="Cancel agent"
+                  className="agent-stop-btn"
+                  title="Stop agent"
                   onClick={requestCancel}
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop
                 </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="cursor-icon-btn"
+                    title="Attach screenshot"
+                    disabled={isSending}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  {blocks.length > 0 && (
+                    <button type="button" className="cursor-icon-btn" title="Clear" onClick={resetRun}>
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="cursor-send-btn"
+                    disabled={(!input.trim() && attachments.length === 0) || isSending}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void handleSend();
+                    }}
+                    title="Send (Enter)"
+                  >
+                    {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+                  </button>
+                </>
               )}
-              {blocks.length > 0 && !isRunning && (
-                <button type="button" className="cursor-icon-btn" title="Clear" onClick={resetRun}>
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                className="cursor-send-btn"
-                disabled={(!input.trim() && attachments.length === 0) || isRunning}
-                onClick={handleSend}
-                title="Send"
-              >
-                {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
-              </button>
             </div>
           </div>
         </div>
       </div>
     </div>
   );
-}
+});

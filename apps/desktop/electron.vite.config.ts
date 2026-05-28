@@ -29,8 +29,14 @@ export default defineConfig({
       postcss: resolve(__dirname, 'postcss.config.js'),
     },
     define: {
-      'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'http://localhost:3001'),
-      'import.meta.env.VITE_WEB_URL': JSON.stringify(process.env.VITE_WEB_URL || 'http://localhost:3000'),
+      'import.meta.env.VITE_API_URL': JSON.stringify(
+        process.env.VITE_API_URL ||
+          (process.env.NODE_ENV === 'production' ? 'https://api.xanderai.online' : 'http://localhost:3001'),
+      ),
+      'import.meta.env.VITE_WEB_URL': JSON.stringify(
+        process.env.VITE_WEB_URL ||
+          (process.env.NODE_ENV === 'production' ? 'https://xanderai.online' : 'http://localhost:3000'),
+      ),
     },
     worker: {
       format: 'es',

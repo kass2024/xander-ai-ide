@@ -194,9 +194,10 @@ export class AiController {
       agentClaude: providers.anthropic,
       providers,
       defaultRouting: {
-        agent: providers.anthropic ? `claude (${defaults.claude})` : 'openai',
+        agent: providers.anthropic ? `claude (${defaults.claude}) for UI; openai otherwise` : 'openai',
         composer: providers.anthropic ? `claude (${defaults.claude})` : providers.google ? `gemini (${defaults.gemini})` : 'openai',
         project_builder: providers.anthropic ? `claude (${defaults.claude})` : 'openai',
+        ui_tasks: providers.anthropic ? `claude (${defaults.claude})` : 'openai',
         repo_analysis: providers.google ? `gemini (${defaults.gemini})` : 'openai',
       },
     };

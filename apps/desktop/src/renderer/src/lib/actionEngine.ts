@@ -117,7 +117,10 @@ export function buildActionFromToolCall(
     return null;
   }
 
-  const type = toolNameToActionType(toolCall.function.name);
+  let type = toolNameToActionType(toolCall.function.name);
+  if (toolCall.function.name === 'git_pull' || toolCall.function.name === 'mysql_execute') {
+    type = 'run_terminal_command';
+  }
   if (!type) return null;
 
   const path = args.path ? String(args.path) : undefined;
@@ -136,7 +139,13 @@ export function buildActionFromToolCall(
     label = `Edit file: ${path}`;
   }
   else if (type === 'delete_file') label = `Delete file: ${path}`;
-  else if (type === 'run_terminal_command') label = `Run: ${command}`;
+  else if (type === 'run_terminal_command') {
+    label = toolCall.function.name === 'mysql_execute'
+      ? `MySQL: ${String(args.sql || '').slice(0, 60)}`
+      : toolCall.function.name === 'git_pull'
+        ? 'Git pull'
+        : `Run: ${command}`;
+  }
 
   return {
     type: actionType,

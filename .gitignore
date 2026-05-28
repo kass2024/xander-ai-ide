@@ -10,8 +10,10 @@ node_modules/
 .env.*.local
 production.env
 server-deploy.env
+.env.linux
 apps/backend/.env
 apps/desktop/.env
+apps/desktop/.env.production
 
 # Build outputs
 dist/

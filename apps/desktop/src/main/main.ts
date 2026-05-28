@@ -24,6 +24,8 @@ import {
   resolveInWorkspace,
   isValidWorkspacePath,
 } from './workspace';
+import { registerAgentIpcHandlers } from './ipc/agentHandlers';
+import { validateCommand } from './security/commandPolicy';
 
 const isDev = !app.isPackaged;
 
@@ -106,7 +108,10 @@ function createWindow(): void {
   mainWindow = createAppWindow();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  registerAgentIpcHandlers();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
@@ -435,6 +440,10 @@ ipcMain.handle('terminal-command', async (_, command: string, cwd?: string) => {
   const resolvedCwd = cwd || currentProjectPath;
   if (!resolvedCwd || !isValidWorkspacePath(resolvedCwd)) {
     return { success: false, error: 'Open a project folder first.', stdout: '', stderr: '' };
+  }
+  const check = validateCommand(command);
+  if (!check.allowed) {
+    return { success: false, error: check.reason || 'Command blocked', stdout: '', stderr: '' };
   }
   return new Promise((resolve) => {
     const child = spawn(command, [], {

@@ -445,6 +445,155 @@
   font-size: 12px;
 }
 
+/* Cursor-style tool timeline */
+.agent-tool-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #b8b8b8;
+}
+
+.agent-tool-step--running {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.agent-tool-step--success {
+  opacity: 0.85;
+}
+
+.agent-tool-step--failed,
+.agent-tool-step--skipped {
+  opacity: 0.75;
+}
+
+.agent-tool-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.agent-tool-step-label {
+  font-weight: 500;
+  color: #ddd;
+}
+
+.agent-tool-step-detail {
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-approval-card {
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: linear-gradient(180deg, rgba(30, 30, 35, 0.95), rgba(22, 22, 26, 0.98));
+}
+
+.agent-approval-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.6rem;
+}
+
+.agent-approval-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #eee;
+}
+
+.agent-approval-sub {
+  font-size: 11px;
+  color: #888;
+  margin-top: 0.15rem;
+}
+
+.agent-approval-command {
+  margin-bottom: 0.6rem;
+}
+
+.agent-approval-command-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+  margin-bottom: 0.25rem;
+}
+
+.agent-approval-command-body {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  background: #0d0d0d;
+  border: 1px solid #333;
+  font-size: 11px;
+  font-family: Consolas, monospace;
+  color: #c5d4ff;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 140px;
+  overflow: auto;
+}
+
+.agent-approval-preview {
+  margin: 0 0 0.5rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: #141414;
+  font-size: 10px;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.agent-approval-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.agent-approval-btn-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.agent-approval-btn-run:hover {
+  background: #2563eb;
+}
+
+.agent-approval-btn-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  color: #aaa;
+  font-size: 12px;
+}
+
+.agent-approval-btn-skip:hover {
+  background: #2a2a2a;
+}
+
 .agent-review-bar {
   display: flex;
   align-items: center;
@@ -669,4 +818,86 @@
 
 .agent-attach-remove:hover {
   background: #555;
+}
+
+/* Agent sidebar & tool cards */
+.agent-sidebar {
+  min-width: 240px;
+}
+
+.agent-tool-card {
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+}
+
+.agent-diff-monaco {
+  border-top: 1px solid #2a2a2a;
+}
+
+.agent-terminal-xterm {
+  background: #0d0d0d;
+}
+
+.agent-approval-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 10px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #252525;
+  color: #ccc;
+  cursor: pointer;
+}
+
+.agent-approval-btn-secondary:hover {
+  background: #333;
+}
+
+.agent-approval-btn-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 10px;
+  border-radius: 6px;
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fca5a5;
+  cursor: pointer;
+}
+
+.agent-approval-btn-cancel:hover {
+  background: #7f1d1d;
+}
+
+.agent-page {
+  color: #e0e0e0;
+}
+
+.agent-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fca5a5;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.agent-stop-btn:hover {
+  background: #7f1d1d;
+  color: #fff;
+}
+
+.recent-tasks-panel {
+  flex-shrink: 0;
 }

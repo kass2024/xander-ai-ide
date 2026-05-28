@@ -368,6 +368,81 @@ export const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'inspect_xampp_mysql',
+      description: 'Probe XAMPP MySQL on Windows (127.0.0.1:3306): list DBs, read project .env DB config.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mysql_list_databases',
+      description: 'List MySQL/MariaDB databases via XAMPP mysql CLI.',
+      parameters: {
+        type: 'object',
+        properties: {
+          user: { type: 'string' },
+          password: { type: 'string' },
+          host: { type: 'string' },
+          port: { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mysql_describe_table',
+      description: 'DESCRIBE a MySQL table (columns, types).',
+      parameters: {
+        type: 'object',
+        properties: {
+          database: { type: 'string' },
+          table: { type: 'string' },
+          user: { type: 'string' },
+          password: { type: 'string' },
+        },
+        required: ['database', 'table'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mysql_query',
+      description: 'Run read-only SQL (SELECT, SHOW, DESCRIBE) against XAMPP MySQL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sql: { type: 'string' },
+          database: { type: 'string' },
+          user: { type: 'string' },
+          password: { type: 'string' },
+        },
+        required: ['sql'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mysql_execute',
+      description: 'Run SQL that changes data/schema (INSERT/UPDATE/DELETE/ALTER). Requires user approval.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sql: { type: 'string' },
+          database: { type: 'string' },
+          user: { type: 'string' },
+          password: { type: 'string' },
+        },
+        required: ['sql'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'walk_project_files',
       description: 'Paginated list of project files for systematic file-by-file review. Follow with read_file.',
       parameters: {
@@ -411,7 +486,9 @@ WORKFLOW (production):
 
 DEBUG & DB:
 - inspect_database reads Prisma, docker-compose, migrations — use before DB fixes
-- For connection errors: check .env.example, docker-compose, prisma schema, then terminal checks (prisma validate, migrate status)
+- inspect_xampp_mysql / mysql_list_databases / mysql_describe_table / mysql_query for XAMPP (Windows localhost MySQL)
+- mysql_execute for INSERT/UPDATE/ALTER (user approves in IDE)
+- For PHP/Laravel samples: read .env, config/database.php, then query tables
 - Support all languages in repo (TS, PHP, Python, Go, Rust, Java, etc.) — match conventions per stack
 
 GIT:
@@ -425,10 +502,12 @@ RULES:
 - Brief status before major steps
 
 MODES (API auto-routing):
-- standard: OpenAI — balanced tool use
-- fast: Gemini/OpenAI mini — quick fixes
+- standard: OpenAI — balanced tool use; UI/frontend/CSS tasks auto-route to Claude
+- fast: Gemini/OpenAI mini — quick fixes; UI tasks auto-route to Claude
 - deep: Claude — thorough multi-file analysis
-- refactor: Claude — multi-file edits via refactor_files then edit_file each`;
+- refactor: Claude — multi-file edits via refactor_files then edit_file each
+- Builder/Composer: Claude — polished UI and multi-file generation
+- Screenshots: Claude vision — error and layout analysis`;
 
   if (context?.agentMode) {
     prompt += `\n\nActive mode: ${context.agentMode}`;

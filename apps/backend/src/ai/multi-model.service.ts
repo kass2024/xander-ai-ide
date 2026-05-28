@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import { normalizeOpenAIKey, resolveOpenAIModel, getModelFallbacks } from './model.utils';
+import { normalizeOpenAIKey, resolveOpenAIModel, getModelFallbacks, resolveGeminiModel, getGeminiFallbacks } from './model.utils';
 import { AGENT_TOOLS } from './agent.tools';
+import { isUiRelatedTask, extractLastUserText } from './ui-routing.utils';
 
 export type TaskType =
   | 'autocomplete'
@@ -81,7 +82,10 @@ export class MultiModelService {
         fast: 'gpt-4o-mini',
       }),
       claude: this.config.get('ANTHROPIC_MODEL') || 'claude-sonnet-4-20250514',
-      gemini: this.config.get('GEMINI_MODEL') || this.config.get('GOOGLE_AI_MODEL') || 'gemini-2.0-flash',
+      gemini: resolveGeminiModel(
+        undefined,
+        this.config.get('GEMINI_MODEL') || this.config.get('GOOGLE_AI_MODEL') || 'gemini-2.5-flash',
+      ),
       embedding: this.config.get('OPENAI_EMBEDDING_MODEL') || 'text-embedding-3-small',
     };
   }
@@ -90,15 +94,17 @@ export class MultiModelService {
     requested: string | undefined,
     task: TaskType,
     agentMode?: string,
+    prompt?: string,
   ): { provider: string; model: string } {
     const defaults = this.getDefaultModels();
+    const uiTask = isUiRelatedTask(prompt || '');
 
     if (requested && requested !== 'auto') {
       if (requested.startsWith('claude') || requested.includes('anthropic')) {
         return { provider: 'anthropic', model: requested };
       }
       if (requested.startsWith('gemini')) {
-        return { provider: 'google', model: requested };
+        return { provider: 'google', model: resolveGeminiModel(requested, defaults.gemini) };
       }
       return { provider: 'openai', model: resolveOpenAIModel(requested, 'agent', defaults) };
     }
@@ -107,6 +113,7 @@ export class MultiModelService {
     if (task === 'agent' && agentMode) {
       switch (agentMode) {
         case 'fast':
+          if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
           if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
           if (this.openai) return { provider: 'openai', model: defaults.fast };
           if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
@@ -119,6 +126,7 @@ export class MultiModelService {
           break;
         case 'standard':
         default:
+          if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
           if (this.openai) return { provider: 'openai', model: defaults.agent };
           if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
           if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
@@ -128,7 +136,11 @@ export class MultiModelService {
 
     switch (task) {
       case 'autocomplete':
+        return { provider: 'openai', model: defaults.fast };
       case 'chat':
+        if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+        if (this.openai) return { provider: 'openai', model: defaults.fast };
+        if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
         return { provider: 'openai', model: defaults.fast };
       case 'code_review':
         if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
@@ -137,7 +149,7 @@ export class MultiModelService {
         if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
         return { provider: 'openai', model: defaults.agent };
       case 'agent':
-        // Auto: OpenAI for tool calls, Claude for large refactors when mode=refactor handled above
+        if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
         if (this.openai) return { provider: 'openai', model: defaults.agent };
         if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
         if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
@@ -161,7 +173,8 @@ export class MultiModelService {
     images?: Array<{ mediaType: string; data: string }>,
     agentMode?: string,
   ): Promise<LLMCompletionResult> {
-    const { provider, model } = this.routeModel(requested, 'agent', agentMode);
+    const prompt = extractLastUserText(messages);
+    const { provider, model } = this.routeModel(requested, 'agent', agentMode, prompt);
     const fallbacks = this.getFallbackChain(provider, model);
 
     let lastError: unknown;
@@ -184,8 +197,9 @@ export class MultiModelService {
     throw lastError || new Error('No AI provider available for agent');
   }
 
-  async complete(requested: string | undefined, task: TaskType, options: LLMCompletionOptions): Promise<LLMCompletionResult> {
-    const { provider, model } = this.routeModel(requested, task);
+  async complete(requested: string | undefined, task: TaskType, options: LLMCompletionOptions, agentMode?: string): Promise<LLMCompletionResult> {
+    const prompt = extractLastUserText(options.messages);
+    const { provider, model } = this.routeModel(requested, task, agentMode, prompt);
     const fallbacks = this.getFallbackChain(provider, model);
 
     let lastError: unknown;
@@ -200,8 +214,9 @@ export class MultiModelService {
     throw lastError;
   }
 
-  async *streamComplete(requested: string | undefined, task: TaskType, options: LLMCompletionOptions): AsyncGenerator<StreamChunk> {
-    const { provider, model } = this.routeModel(requested, task);
+  async *streamComplete(requested: string | undefined, task: TaskType, options: LLMCompletionOptions, agentMode?: string): AsyncGenerator<StreamChunk> {
+    const prompt = extractLastUserText(options.messages);
+    const { provider, model } = this.routeModel(requested, task, agentMode, prompt);
 
     if (provider === 'openai' && this.openai) {
       yield* this.streamOpenAI(model, options);
@@ -220,13 +235,30 @@ export class MultiModelService {
   }
 
   private getFallbackChain(primaryProvider: string, primaryModel: string): Array<{ prov: string; mod: string }> {
-    const chain: Array<{ prov: string; mod: string }> = [{ prov: primaryProvider, mod: primaryModel }];
+    const chain: Array<{ prov: string; mod: string }> = [];
     const defaults = this.getDefaultModels();
-    if (primaryProvider !== 'anthropic' && this.anthropicKey) chain.push({ prov: 'anthropic', mod: defaults.claude });
-    if (primaryProvider !== 'openai' && this.openai) {
-      for (const mod of getModelFallbacks(defaults.agent)) chain.push({ prov: 'openai', mod });
+    const seen = new Set<string>();
+
+    const push = (prov: string, mod: string) => {
+      const key = `${prov}:${mod}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      chain.push({ prov, mod });
+    };
+
+    if (primaryProvider === 'google' && this.geminiKey) {
+      for (const mod of getGeminiFallbacks(primaryModel)) push('google', mod);
+    } else {
+      push(primaryProvider, primaryModel);
     }
-    if (primaryProvider !== 'google' && this.geminiKey) chain.push({ prov: 'google', mod: defaults.gemini });
+
+    if (primaryProvider !== 'anthropic' && this.anthropicKey) push('anthropic', defaults.claude);
+    if (primaryProvider !== 'openai' && this.openai) {
+      for (const mod of getModelFallbacks(defaults.agent)) push('openai', mod);
+    }
+    if (primaryProvider !== 'google' && this.geminiKey) {
+      for (const mod of getGeminiFallbacks(defaults.gemini)) push('google', mod);
+    }
     return chain;
   }
 
@@ -429,7 +461,10 @@ export class MultiModelService {
       }),
     });
 
-    if (!res.ok) throw new Error(`Gemini API error ${res.status}`);
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 300);
+      throw new Error(`Gemini API error ${res.status}: ${detail}`);
+    }
     const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
@@ -535,7 +570,10 @@ export class MultiModelService {
       }),
     });
 
-    if (!res.ok) throw new Error(`Gemini API ${res.status}`);
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 300);
+      throw new Error(`Gemini API error ${res.status}: ${detail}`);
+    }
     const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     return { content: text, model, provider: 'google', tokens: Math.ceil(text.length / 4) };
@@ -568,10 +606,14 @@ If no error is visible, describe what the screenshot shows and what the user lik
       ? `User request: ${userPrompt}\n\nAnalyze the attached screenshot(s) and report every error or issue visible.`
       : 'Analyze the attached screenshot(s) and report every error or issue visible.';
 
-    const fallbacks = this.getFallbackChain(
-      this.routeModel(undefined, 'agent').provider,
-      this.routeModel(undefined, 'agent').model,
-    );
+    const defaults = this.getDefaultModels();
+    const primaryProv = this.anthropicKey ? 'anthropic' : this.openai ? 'openai' : 'google';
+    const primaryMod = this.anthropicKey
+      ? defaults.claude
+      : this.openai
+        ? defaults.agent
+        : defaults.gemini;
+    const fallbacks = this.getFallbackChain(primaryProv, primaryMod);
 
     let lastError: unknown;
     for (const { prov, mod } of fallbacks) {
@@ -642,6 +684,8 @@ If no error is visible, describe what the screenshot shows and what the user lik
       'gpt-4o': 0.000005,
       'gpt-4o-mini': 0.0000005,
       'claude-sonnet-4-20250514': 0.000015,
+      'gemini-2.5-flash': 0.000001,
+      'gemini-2.5-pro': 0.000005,
       'gemini-2.0-flash': 0.000001,
     };
     return (costs[model] || 0.00001) * tokens;

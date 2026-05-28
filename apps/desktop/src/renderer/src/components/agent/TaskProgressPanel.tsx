@@ -21,17 +21,15 @@ interface TaskProgressPanelProps {
   compact?: boolean;
 }
 
-export function TaskProgressPanel({ projectPath, compact }: TaskProgressPanelProps) {
-  const { tasks, activeTaskId } = useTaskStore();
+export function TaskProgressPanel(_props: TaskProgressPanelProps) {
+  const activeTaskId = useTaskStore((s) => s.activeTaskId);
+  const activeTask = useTaskStore((s) => s.tasks.find((t) => t.id === activeTaskId));
   const phase = useAgentStateStore((s) => s.phase);
-  const isRunning = useAgentStateStore((s) => s.phase !== 'idle' && s.phase !== 'completed' && s.phase !== 'failed');
+  const isRunning = useAgentStateStore(
+    (s) => s.phase !== 'idle' && s.phase !== 'completed' && s.phase !== 'failed',
+  );
 
-  const activeTask = tasks.find((t) => t.id === activeTaskId);
-  const recent = tasks
-    .filter((t) => !projectPath || t.projectPath === projectPath)
-    .slice(0, compact ? 5 : 12);
-
-  if (!activeTask?.cards.length && !isRunning && recent.length === 0) {
+  if (!activeTask?.cards.length && !isRunning) {
     return null;
   }
 
@@ -46,7 +44,7 @@ export function TaskProgressPanel({ projectPath, compact }: TaskProgressPanelPro
         </div>
       )}
       {cards.length > 0 && (
-        <div className="px-2 pb-2 space-y-1 max-h-48 overflow-y-auto">
+        <div className="px-2 pb-2 space-y-1 max-h-36 overflow-y-auto">
           {cards.map((card) => (
             <div
               key={card.id}
@@ -61,31 +59,6 @@ export function TaskProgressPanel({ projectPath, compact }: TaskProgressPanelPro
               </div>
             </div>
           ))}
-        </div>
-      )}
-      {!compact && recent.length > 1 && (
-        <div className="px-3 py-2 border-t border-[var(--vscode-panel-border)]">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--vscode-descriptionForeground)] mb-1">
-            Recent tasks
-          </div>
-          <ul className="space-y-1">
-            {recent.filter((t) => t.id !== activeTaskId).map((t) => (
-              <li key={t.id} className="text-[11px] truncate text-[var(--vscode-foreground)] opacity-80">
-                <span
-                  className={
-                    t.status === 'completed'
-                      ? 'text-emerald-500'
-                      : t.status === 'failed'
-                        ? 'text-red-400'
-                        : 'text-yellow-400'
-                  }
-                >
-                  ●
-                </span>{' '}
-                {t.prompt.slice(0, 60)}
-              </li>
-            ))}
-          </ul>
         </div>
       )}
     </div>

@@ -11,7 +11,11 @@ export type AgentBlockType =
   | 'terminal'
   | 'text'
   | 'error'
-  | 'screenshot_analysis';
+  | 'screenshot_analysis'
+  | 'tool_step'
+  | 'approval';
+
+export type ToolStepStatus = 'running' | 'success' | 'failed' | 'skipped' | 'awaiting_approval';
 
 export interface AgentBlock {
   id: string;
@@ -34,6 +38,12 @@ export interface AgentBlock {
   success?: boolean;
   content?: string;
   imagePreviews?: string[];
+  toolName?: string;
+  stepStatus?: ToolStepStatus;
+  stepLabel?: string;
+  stepDetail?: string;
+  actionId?: string;
+  approvalReason?: string;
 }
 
 export interface AgentFileEdit {
@@ -67,6 +77,18 @@ interface AgentRunStore {
   addTerminal: (command: string, output: string, success: boolean, exitCode?: number) => void;
   addText: (content: string) => void;
   addError: (message: string) => void;
+  startToolStep: (toolName: string, label: string, detail?: string) => string;
+  finishToolStep: (stepId: string, status: ToolStepStatus, detail?: string) => void;
+  addApprovalBlock: (opts: {
+    toolName: string;
+    label: string;
+    actionId: string;
+    command?: string;
+    path?: string;
+    preview?: string;
+    reason?: string;
+  }) => string;
+  removeApprovalBlock: (blockId: string) => void;
   toggleDiff: (blockId: string) => void;
   toggleFilesList: () => void;
   undoAll: (projectPath: string) => Promise<number>;
@@ -245,7 +267,7 @@ export const useAgentRunStore = create<AgentRunStore>((set, get) => ({
           path,
           originalContent,
           newContent,
-          expanded: true,
+          expanded: false,
           editStatus: 'applied',
         },
       ],
@@ -305,6 +327,66 @@ export const useAgentRunStore = create<AgentRunStore>((set, get) => ({
           content: message,
         },
       ],
+    }));
+  },
+
+  startToolStep: (toolName, label, detail) => {
+    get().flushExplored();
+    const id = nextId('step');
+    set((state) => ({
+      blocks: [
+        ...state.blocks,
+        {
+          id,
+          type: 'tool_step',
+          timestamp: Date.now(),
+          toolName,
+          stepLabel: label,
+          stepDetail: detail,
+          stepStatus: 'running',
+        },
+      ],
+    }));
+    return id;
+  },
+
+  finishToolStep: (stepId, status, detail) => {
+    set((state) => ({
+      blocks: state.blocks.map((b) =>
+        b.id === stepId && b.type === 'tool_step'
+          ? { ...b, stepStatus: status, stepDetail: detail ?? b.stepDetail }
+          : b,
+      ),
+    }));
+  },
+
+  addApprovalBlock: (opts) => {
+    get().clearStatus();
+    const id = nextId('approval');
+    set((state) => ({
+      blocks: [
+        ...state.blocks,
+        {
+          id,
+          type: 'approval',
+          timestamp: Date.now(),
+          toolName: opts.toolName,
+          stepLabel: opts.label,
+          actionId: opts.actionId,
+          command: opts.command,
+          path: opts.path,
+          content: opts.preview,
+          approvalReason: opts.reason,
+          stepStatus: 'awaiting_approval',
+        },
+      ],
+    }));
+    return id;
+  },
+
+  removeApprovalBlock: (blockId) => {
+    set((state) => ({
+      blocks: state.blocks.filter((b) => b.id !== blockId),
     }));
   },
 

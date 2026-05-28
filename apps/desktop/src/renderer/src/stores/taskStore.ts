@@ -34,6 +34,7 @@ interface TaskStore {
   completeTask: (taskId: string, status: 'completed' | 'failed' | 'cancelled') => void;
   getRecentTasks: (projectPath?: string, limit?: number) => AgentTask[];
   clearOldTasks: (keep?: number) => void;
+  removeTask: (taskId: string) => void;
 }
 
 let cardId = 0;
@@ -110,6 +111,13 @@ export const useTaskStore = create<TaskStore>()(
 
       clearOldTasks: (keep = 30) => {
         set((s) => ({ tasks: s.tasks.slice(0, keep) }));
+      },
+
+      removeTask: (taskId) => {
+        set((s) => ({
+          tasks: s.tasks.filter((t) => t.id !== taskId),
+          activeTaskId: s.activeTaskId === taskId ? null : s.activeTaskId,
+        }));
       },
     }),
     { name: 'xander-agent-tasks', partialize: (s) => ({ tasks: s.tasks }) },

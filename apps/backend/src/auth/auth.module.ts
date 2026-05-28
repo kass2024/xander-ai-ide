@@ -22,7 +22,7 @@ import { RolesGuard } from './guards/roles.guard';
         if (!secret) {
           throw new Error('JWT_SECRET is not configured');
         }
-        return { secret, signOptions: { expiresIn: '7d' } };
+        return { secret, signOptions: { expiresIn: '90d' } };
       },
     }),
   ],

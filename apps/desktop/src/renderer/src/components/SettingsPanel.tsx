@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useBillingStore } from '../stores/billingStore';
-import apiClient, { type Plan } from '../lib/api';
+import apiClient, { configureApiClient, type Plan } from '../lib/api';
+import { getWebBaseUrl, PRODUCTION_API_URL } from '../lib/apiConfig';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -20,20 +21,31 @@ const NAV_ITEMS = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
 ];
 
-const WEB_URL = import.meta.env.VITE_WEB_URL || 'http://localhost:3000';
-
 export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [billingCycle, setBillingCycle] = useState<'month' | 'year'>('month');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [cloudOnline, setCloudOnline] = useState<boolean | null>(null);
   const [planMessage, setPlanMessage] = useState('');
   const [aiModels, setAiModels] = useState<Array<{ id: string; name: string; description: string; tier?: string }>>([]);
 
   const { user, isAuthenticated, loading: authLoading, error: authError, login, logout, loadSession } = useAuthStore();
   const { subscription, plans, usage, loading: billingLoading, fetchAll, changePlan } = useBillingStore();
 
+  const checkCloud = async () => {
+    configureApiClient();
+    try {
+      const res = await fetch(`${PRODUCTION_API_URL}/health`);
+      setCloudOnline(res.ok);
+    } catch {
+      setCloudOnline(false);
+    }
+  };
+
   useEffect(() => {
+    configureApiClient();
+    void checkCloud();
     loadSession().then(() => fetchAll());
     if (apiClient.getToken()) {
       apiClient.getModels().then((r) => setAiModels(r.models || [])).catch(() => {});
@@ -85,6 +97,17 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
         </p>
       </div>
 
+      {isAuthenticated && (
+        <div className="rounded-lg border border-[var(--vscode-border)] bg-[var(--vscode-input-background)] px-4 py-3 flex items-center justify-between text-sm">
+          <span className="text-[var(--vscode-descriptionForeground)]">
+            Xander Cloud · <span className="font-mono text-xs">{PRODUCTION_API_URL}</span>
+          </span>
+          {cloudOnline === true && <span className="text-green-400">● Online</span>}
+          {cloudOnline === false && <span className="text-red-400">● Offline</span>}
+          {cloudOnline === null && <span className="opacity-50">Checking…</span>}
+        </div>
+      )}
+
       {!isAuthenticated ? (
         <div className="rounded-lg border border-[var(--vscode-border)] bg-[var(--vscode-input-background)] p-6">
           <h3 className="text-base font-medium mb-4 flex items-center gap-2">
@@ -133,7 +156,7 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => window.electronAPI?.openExternal(`${WEB_URL}/dashboard`)}
+              onClick={() => window.electronAPI?.openExternal(`${getWebBaseUrl()}/dashboard`)}
               className="flex items-center gap-2 px-3 py-1.5 text-sm border border-[var(--vscode-border)] rounded hover:bg-[var(--vscode-list-hoverBackground)]"
             >
               <ExternalLink className="w-3.5 h-3.5" /> Open Web Dashboard
@@ -154,7 +177,7 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
           Manage your account and billing on the web dashboard.
         </p>
         <button
-          onClick={() => window.electronAPI?.openExternal(`${WEB_URL}/dashboard/manage-plan`)}
+          onClick={() => window.electronAPI?.openExternal(`${getWebBaseUrl()}/dashboard/manage-plan`)}
           className="px-4 py-2 text-sm bg-[var(--vscode-button-background)] text-white rounded hover:bg-[var(--vscode-button-hoverBackground)]"
         >
           Manage Account

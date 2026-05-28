@@ -1,6 +1,13 @@
 import { resolvePath } from './projectContext';
 import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
 import { inspectDatabase } from './inspectDatabase';
+import {
+  detectXamppConfig,
+  describeMysqlTable,
+  isReadOnlySql,
+  listMysqlDatabases,
+  runMysql,
+} from './xamppDatabase';
 import { applyPatch, snapshotBeforeEdit } from './patchUtils';
 import {
   detectDbStack,
@@ -452,6 +459,77 @@ export async function executeToolCall(
         };
       }
 
+      case 'inspect_xampp_mysql': {
+        const report = await detectXamppConfig(projectPath || undefined);
+        return {
+          tool_call_id: toolCall.id,
+          content: truncate(report),
+          success: true,
+        };
+      }
+
+      case 'mysql_list_databases': {
+        const opts = {
+          user: args.user ? String(args.user) : 'root',
+          password: args.password ? String(args.password) : '',
+          host: args.host ? String(args.host) : '127.0.0.1',
+          port: args.port ? Number(args.port) : 3306,
+        };
+        const out = await listMysqlDatabases(opts);
+        return {
+          tool_call_id: toolCall.id,
+          content: truncate(out),
+          success: !out.toLowerCase().includes('error'),
+        };
+      }
+
+      case 'mysql_describe_table': {
+        const database = String(args.database || '');
+        const table = String(args.table || '');
+        if (!database || !table) {
+          return { tool_call_id: toolCall.id, content: 'Need database and table', success: false };
+        }
+        const opts = {
+          user: args.user ? String(args.user) : 'root',
+          password: args.password ? String(args.password) : '',
+          host: args.host ? String(args.host) : '127.0.0.1',
+        };
+        const out = await describeMysqlTable(database, table, opts);
+        return {
+          tool_call_id: toolCall.id,
+          content: truncate(out),
+          success: true,
+        };
+      }
+
+      case 'mysql_query':
+      case 'mysql_execute': {
+        const sql = String(args.sql || args.query || '');
+        if (!sql.trim()) {
+          return { tool_call_id: toolCall.id, content: 'Empty SQL', success: false };
+        }
+        const opts = {
+          database: args.database ? String(args.database) : undefined,
+          user: args.user ? String(args.user) : 'root',
+          password: args.password ? String(args.password) : '',
+          host: args.host ? String(args.host) : '127.0.0.1',
+          port: args.port ? Number(args.port) : 3306,
+        };
+        if (name === 'mysql_query' && !isReadOnlySql(sql)) {
+          return {
+            tool_call_id: toolCall.id,
+            content: 'mysql_query is read-only (SELECT/SHOW/DESCRIBE). Use mysql_execute for writes.',
+            success: false,
+          };
+        }
+        const result = await runMysql(sql, opts);
+        return {
+          tool_call_id: toolCall.id,
+          content: truncate(result.output),
+          success: result.success,
+        };
+      }
+
       case 'walk_project_files': {
         if (!projectPath) {
           return { tool_call_id: toolCall.id, content: 'No project open', success: false };
@@ -504,6 +582,10 @@ export const AUTO_TOOLS = new Set([
   'semantic_search',
   'analyze_project',
   'inspect_database',
+  'inspect_xampp_mysql',
+  'mysql_list_databases',
+  'mysql_describe_table',
+  'mysql_query',
   'walk_project_files',
   'git_status',
   'git_diff',
@@ -528,4 +610,5 @@ export const APPROVAL_TOOLS = new Set([
   'git_commit',
   'git_push',
   'git_pull',
+  'mysql_execute',
 ]);

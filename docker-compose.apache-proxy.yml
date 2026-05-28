@@ -1,0 +1,13 @@
+# Use with Apache on the host owning ports 80/443.
+# Docker Nginx listens on 127.0.0.1:8088 only — Apache proxies xanderai.online here.
+#
+#   docker compose -f docker-compose.prod.yml \
+#     -f docker-compose.apache-proxy.yml \
+#     --env-file .env.production up -d
+
+services:
+  nginx:
+    ports: !override
+      - '127.0.0.1:8088:80'
+    volumes: !override
+      - ${NGINX_CONFIG:-./nginx.apache-proxy.conf}:/etc/nginx/nginx.conf:ro

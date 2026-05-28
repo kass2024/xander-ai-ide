@@ -65,7 +65,7 @@ export interface StreamEvent {
 
 export type StreamEventHandler = (event: StreamEvent) => void;
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { getApiBaseUrl } from './apiConfig';
 
 const BUILD_ENDPOINTS = ['/ai/build', '/ai/builder', '/ai/project/build', '/ai/composer/stream'];
 
@@ -90,7 +90,7 @@ export class StreamClient {
     this.abortController = new AbortController();
     const token = localStorage.getItem('auth_token');
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -145,12 +145,12 @@ export class StreamClient {
     agentClaude?: boolean;
   }> {
     try {
-      const health = await fetch(`${API_BASE_URL}/health`);
+      const health = await fetch(`${getApiBaseUrl()}/health`);
       if (!health.ok) {
-        return { ok: false, projectBuilder: false, message: 'Backend offline — start on http://localhost:3001' };
+        return { ok: false, projectBuilder: false, message: `Backend offline at ${getApiBaseUrl()}` };
       }
       const token = localStorage.getItem('auth_token');
-      const res = await fetch(`${API_BASE_URL}/ai/capabilities`, {
+      const res = await fetch(`${getApiBaseUrl()}/ai/capabilities`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
@@ -170,7 +170,7 @@ export class StreamClient {
       }
       return { ok: false, projectBuilder: false, message: `Backend error ${res.status}` };
     } catch {
-      return { ok: false, projectBuilder: false, message: 'Backend offline — start on http://localhost:3001' };
+      return { ok: false, projectBuilder: false, message: `Backend offline at ${getApiBaseUrl()}` };
     }
   }
 

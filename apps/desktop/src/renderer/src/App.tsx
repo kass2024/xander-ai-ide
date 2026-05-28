@@ -11,6 +11,7 @@ import { StatusBar } from './components/StatusBar';
 import { GitPanel } from './components/GitPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { SearchPanel } from './components/SearchPanel';
+import { AgentPage } from './pages/AgentPage';
 import { AgentsPanel } from './components/AgentsPanel';
 import { useProjectStore } from './stores/projectStore';
 import { joinPath } from './lib/fileTree';
@@ -21,7 +22,7 @@ import { useBillingStore } from './stores/billingStore';
 import { useAgentStore } from './stores/agentStore';
 import { useCodebaseIndexStore } from './stores/codebaseIndexStore';
 import { indexProjectForSearch } from './lib/codebaseSearch';
-import apiClient from './lib/api';
+import apiClient, { configureApiClient } from './lib/api';
 import { saveLastWorkspace, restoreLastWorkspaceIfAny } from './lib/workspaceManager';
 import { MenuActionId } from './lib/menuActions';
 import { FileItem } from '../types';
@@ -84,7 +85,19 @@ function App() {
   const indexChunks = useCodebaseIndexStore((s) => s.chunksIndexed);
 
   useEffect(() => {
+    if (import.meta.env.PROD) {
+      localStorage.removeItem('xander_api_base_url');
+      localStorage.removeItem('xander_web_base_url');
+    }
+    configureApiClient();
     loadSession().then(() => fetchAll());
+
+    const onFocus = () => {
+      if (apiClient.getToken()) {
+        apiClient.tryRefreshToken().catch(() => {});
+      }
+    };
+    window.addEventListener('focus', onFocus);
     window.electronAPI?.windowIsMaximized().then(setIsMaximized);
 
     window.electronAPI?.onFileChanged((path) => {
@@ -107,6 +120,7 @@ function App() {
     });
 
     return () => {
+      window.removeEventListener('focus', onFocus);
       window.electronAPI?.removeAllListeners('file-changed');
       window.electronAPI?.removeAllListeners('file-added');
       window.electronAPI?.removeAllListeners('file-deleted');
@@ -646,32 +660,21 @@ function App() {
         <div className="h-9 flex items-center px-4 border-b border-[var(--vscode-titleBar-border)] bg-[var(--vscode-titleBar-background)]">
           <span className="text-[13px] font-semibold">Xander Agents</span>
         </div>
-        <div className="flex-1 flex min-h-0">
-          <div className="w-64 border-r border-[var(--vscode-sideBar-border)]">
-            <AgentsPanel
-              projectPath={currentProject}
-              onOpenAgent={(id) => { setActiveAgentId(id); setActiveSession(id); }}
-              onNewAgentWindow={() => window.electronAPI.windowNewAgent()}
-            />
-          </div>
-          <div className="flex-1">
-            <AIChatPanel
-              agentSessionId={activeAgentId}
-              projectPath={currentProject}
-              workspaceFolders={workspaceFolders}
-              openFiles={openFiles}
-              currentFilePath={currentFile?.filePath}
-              selectedCode={selectedCode}
-              onComposerApply={handleComposerApply}
-              onFileChanged={handleAgentFileChanged}
-              onOpenFile={handleOpenGeneratedFile}
-              onRefreshExplorer={() => refreshTree()}
-              onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
-              onRefreshGit={() => refreshGitStatus()}
-              onWorkspaceReady={handleWorkspaceReady}
-              compact
-            />
-          </div>
+        <div className="flex-1 min-h-0">
+          <AgentPage
+            projectPath={currentProject}
+            workspaceFolders={workspaceFolders}
+            openFiles={openFiles}
+            currentFilePath={currentFile?.filePath}
+            selectedCode={selectedCode}
+            onFileChanged={handleAgentFileChanged}
+            onOpenFile={handleOpenGeneratedFile}
+            onRefreshExplorer={() => refreshTree()}
+            onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
+            onRefreshGit={() => refreshGitStatus()}
+            onWorkspaceReady={handleWorkspaceReady}
+            onNewAgentWindow={() => window.electronAPI.windowNewAgent()}
+          />
         </div>
       </div>
     );

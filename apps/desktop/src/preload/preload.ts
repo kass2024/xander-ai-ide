@@ -59,6 +59,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   windowNew: () => ipcRenderer.invoke('window-new'),
   windowNewAgent: () => ipcRenderer.invoke('window-new-agent'),
+
+  agentListSessions: (includeArchived?: boolean) => ipcRenderer.invoke('agent:list-sessions', includeArchived),
+  agentSaveSession: (session: unknown) => ipcRenderer.invoke('agent:save-session', session),
+  agentSaveMessage: (msg: unknown) => ipcRenderer.invoke('agent:save-message', msg),
+  agentGetMessages: (sessionId: string) => ipcRenderer.invoke('agent:get-messages', sessionId),
+  agentSaveToolCall: (record: unknown) => ipcRenderer.invoke('agent:save-tool-call', record),
+  agentSaveApproval: (record: unknown) => ipcRenderer.invoke('agent:save-approval', record),
+  agentSaveFileChange: (record: unknown) => ipcRenderer.invoke('agent:save-file-change', record),
+  agentGetWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('agent:get-workspace-settings', workspacePath),
+  agentSaveWorkspaceSettings: (settings: unknown) => ipcRenderer.invoke('agent:save-workspace-settings', settings),
+  agentCheckApproval: (payload: { toolName: string; argsJson: string; workspacePath?: string }) =>
+    ipcRenderer.invoke('agent:check-approval', payload),
+  agentExecuteTool: (payload: { toolName: string; args: Record<string, unknown>; workspacePath: string; sessionId?: string }) =>
+    ipcRenderer.invoke('agent:execute-tool', payload),
+  agentApplyApprovalPolicy: (payload: { toolName: string; decision: string; workspacePath?: string }) =>
+    ipcRenderer.invoke('agent:apply-approval-policy', payload),
+  agentLogTool: (entry: unknown) => ipcRenderer.invoke('agent:log-tool', entry),
   
   // Utility
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
@@ -139,6 +156,20 @@ export interface ElectronAPI {
   gitSwitchBranch: (repoPath: string, branchName: string) => Promise<{ success: boolean; error?: string }>;
   windowNew: () => Promise<{ success: boolean }>;
   windowNewAgent: () => Promise<{ success: boolean }>;
+
+  agentListSessions: (includeArchived?: boolean) => Promise<{ success: boolean; sessions?: unknown[]; error?: string }>;
+  agentSaveSession: (session: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentSaveMessage: (msg: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentGetMessages: (sessionId: string) => Promise<{ success: boolean; messages?: unknown[]; error?: string }>;
+  agentSaveToolCall: (record: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentSaveApproval: (record: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentSaveFileChange: (record: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentGetWorkspaceSettings: (workspacePath: string) => Promise<{ success: boolean; settings?: { workspacePath: string; alwaysAllowTools: string[] }; error?: string }>;
+  agentSaveWorkspaceSettings: (settings: unknown) => Promise<{ success: boolean; error?: string }>;
+  agentCheckApproval: (payload: { toolName: string; argsJson: string; workspacePath?: string }) => Promise<{ success: boolean; requiresApproval?: boolean; riskLevel?: string }>;
+  agentExecuteTool: (payload: { toolName: string; args: Record<string, unknown>; workspacePath: string; sessionId?: string }) => Promise<{ success: boolean; result?: { tool_call_id: string; content: string; success: boolean }; error?: string }>;
+  agentApplyApprovalPolicy: (payload: { toolName: string; decision: string; workspacePath?: string }) => Promise<{ success: boolean }>;
+  agentLogTool: (entry: unknown) => Promise<{ success: boolean; error?: string }>;
   
   // Utility
   openExternal: (url: string) => Promise<void>;

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Bot, Plus, Search, Archive, Trash2, MessageSquare, Sparkles, Code, X } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
-import { useTaskStore } from '../stores/taskStore';
+import { RecentTasksPanel } from './agent/RecentTasksPanel';
+import { useAgentUiStore } from '../stores/agentUiStore';
 
 interface AgentsPanelProps {
   projectPath?: string | null;
@@ -18,7 +19,8 @@ export function AgentsPanel({ projectPath, onOpenAgent, onNewAgentWindow }: Agen
   const [newMode, setNewMode] = useState<AgentMode>('agent');
   const { sessions, activeSessionId, createSession, setActiveSession, archiveSession, deleteSession } =
     useAgentStore();
-  const recentTasks = useTaskStore((s) => s.getRecentTasks(projectPath || undefined, 6));
+
+  const setInject = useAgentUiStore((s) => s.setInject);
 
   const active = sessions.filter((s) => !s.archived);
   const archived = sessions.filter((s) => s.archived);
@@ -144,31 +146,8 @@ export function AgentsPanel({ projectPath, onOpenAgent, onNewAgentWindow }: Agen
           ))
         )}
 
-        {recentTasks.length > 0 && (
-          <div className="mt-4 border-t border-[var(--vscode-sideBar-border)] pt-3">
-            <div className="text-[11px] uppercase opacity-50 px-2 mb-1">Recent tasks</div>
-            {recentTasks.map((task) => (
-              <div key={task.id} className="px-2 py-1.5 text-[11px] opacity-80">
-                <span
-                  className={
-                    task.status === 'completed'
-                      ? 'text-emerald-500'
-                      : task.status === 'failed'
-                        ? 'text-red-400'
-                        : 'text-yellow-400'
-                  }
-                >
-                  ●
-                </span>{' '}
-                <span className="truncate block">{task.prompt.slice(0, 48)}</span>
-                <span className="text-[10px] opacity-40">{task.cards.length} steps</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {archived.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-4 border-t border-[var(--vscode-sideBar-border)] pt-3">
             <div className="text-[11px] uppercase opacity-50 px-2 mb-1">Archived</div>
             {archived.map((session) => (
               <div key={session.id} className="px-2 py-1.5 text-[12px] opacity-60 truncate">
@@ -178,6 +157,12 @@ export function AgentsPanel({ projectPath, onOpenAgent, onNewAgentWindow }: Agen
           </div>
         )}
       </div>
+
+      <RecentTasksPanel
+        projectPath={projectPath}
+        onReEdit={(p) => setInject(p, false)}
+        onContinue={(p) => setInject(p, true)}
+      />
 
       {showNewDialog && (
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

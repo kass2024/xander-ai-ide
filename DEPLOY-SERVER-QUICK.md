@@ -74,14 +74,24 @@ chmod +x scripts/setup-ssl.sh
 CERTBOT_EMAIL=admin@xanderai.online ./scripts/setup-ssl.sh
 ```
 
-## Port 80 already in use (nginx fails to start)
+## Port 80 already in use (Apache / nginx on host)
 
-Something on the VPS is already bound to port 80 (often system nginx or Apache):
+If the VPS already serves **parrotcanada.site**, **parrotmoc.online**, etc. via **Apache**, do **not** stop Apache or let Docker bind 80/443.
+
+Use the Apache + Docker coexist guide:
+
+```bash
+cd /opt/xander-ai-ide && git pull
+sudo bash scripts/fix-apache-docker-coexist.sh
+```
+
+See **`APACHE-DOCKER-COEXIST.md`**.
+
+For a **dedicated** VPS with no other sites, you may stop host nginx/Apache instead:
 
 ```bash
 sudo ss -tlnp | grep ':80 '
 sudo systemctl stop nginx apache2 2>/dev/null
-sudo systemctl disable nginx apache2 2>/dev/null
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
 ```
 

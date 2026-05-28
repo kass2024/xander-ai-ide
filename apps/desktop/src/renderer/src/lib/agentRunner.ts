@@ -1,5 +1,6 @@
 import apiClient from './api';
 import { executeToolCall, ToolCall, AUTO_TOOLS, APPROVAL_TOOLS } from './agentTools';
+import { APPROVAL_REQUIRED_TOOLS, AUTO_APPROVE_TOOLS } from '../../../shared/toolSchemas';
 import { WorkspaceContext, resolvePath } from './projectContext';
 import { useActionStore } from '../stores/actionStore';
 import { buildActionFromToolCall } from './actionEngine';
@@ -9,6 +10,17 @@ import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
 import { clearBackups } from './patchUtils';
 import type { AgentMode } from '../stores/agentStateStore';
 import { ensureWorkspace, WorkspaceCancelledError } from './workspaceManager';
+import { useAuthStore } from '../stores/authStore';
+import { useAgentRunStore } from '../stores/agentRunStore';
+import { useAgentPreferencesStore } from '../stores/agentPreferencesStore';
+import { toolTitle, toolStepDetail } from './toolLabels';
+import { isMockMode, mockAgentStream } from './providers';
+import { isUiRelatedTask, CLAUDE_UI_MODEL } from './uiRouting';
+import {
+  checkToolApproval,
+  persistToolCall,
+} from './agentPersistence';
+import { getToolRiskLevel } from '../../../shared/toolSchemas';
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -27,7 +39,9 @@ export interface AgentProgress {
     | 'done'
     | 'error'
     | 'approval_needed'
+    | 'approval_prompt'
     | 'file_edit'
+    | 'stepId'
     | 'terminal'
     | 'explored'
     | 'search'
@@ -81,6 +95,10 @@ const TOOL_ACTIVITY: Record<string, (args: Record<string, unknown>) => string> =
   semantic_search: (a) => `Semantic search: "${String(a.query || '').slice(0, 60)}"...`,
   analyze_project: () => 'Analyzing project structure...',
   inspect_database: () => 'Inspecting database config...',
+  inspect_xampp_mysql: () => 'Connecting to XAMPP MySQL...',
+  mysql_list_databases: () => 'Listing MySQL databases...',
+  mysql_query: () => 'Running SQL query...',
+  mysql_execute: () => 'Executing SQL...',
   walk_project_files: () => 'Listing project files...',
   git_commit: (a) => `Committing: ${String(a.message || '').slice(0, 50)}...`,
   git_push: () => 'Pushing to remote...',
@@ -133,12 +151,34 @@ async function readOriginalContent(
   }
 }
 
+async function toolNeedsApproval(
+  toolName: string,
+  argsJson: string,
+  workspacePath?: string | null,
+): Promise<boolean> {
+  const prefs = useAgentPreferencesStore.getState();
+  if (prefs.isToolAllowed(toolName, workspacePath || undefined)) return false;
+  if (AUTO_APPROVE_TOOLS.has(toolName) || AUTO_TOOLS.has(toolName)) {
+    if (!APPROVAL_REQUIRED_TOOLS.has(toolName) && !APPROVAL_TOOLS.has(toolName)) return false;
+  }
+  try {
+    const check = await checkToolApproval(toolName, argsJson, workspacePath || undefined);
+    return check.requiresApproval;
+  } catch {
+    return APPROVAL_REQUIRED_TOOLS.has(toolName) || APPROVAL_TOOLS.has(toolName);
+  }
+}
+
 async function requestToolApproval(
   tc: ToolCall,
   projectPath: string | null | undefined,
+  stepId: string,
 ): Promise<boolean> {
   const built = buildActionFromToolCall(tc);
   if (!built) return false;
+
+  const args = parseToolArgs(tc.function.arguments);
+  const riskLevel = getToolRiskLevel(tc.function.name, args);
 
   if (built.path && (built.type === 'write_file' || built.type === 'edit_file')) {
     try {
@@ -153,14 +193,47 @@ async function requestToolApproval(
 
   const { addAction } = useActionStore.getState();
   useAgentStateStore.getState().setPhase('awaiting_confirmation');
-  return addAction(built);
+
+  const approvalPromise = addAction(built);
+  const pendingList = useActionStore.getState().actions.filter((a) => a.status === 'pending');
+  const pending =
+    pendingList.find((a) => a.toolCall?.id === tc.id) ?? pendingList[pendingList.length - 1];
+  const actionId = pending?.id;
+
+  let approvalBlockId: string | undefined;
+  if (actionId) {
+    approvalBlockId = useAgentRunStore.getState().addApprovalBlock({
+      toolName: tc.function.name,
+      label: built.label,
+      actionId,
+      command: built.command,
+      path: built.path,
+      preview: built.content?.slice(0, 2000),
+      reason:
+        tc.function.name === 'run_terminal'
+          ? `Shell command (${riskLevel} risk) — review before running on your machine.`
+          : tc.function.name === 'git_push'
+            ? 'Pushes commits to the remote repository.'
+            : tc.function.name === 'delete_file'
+              ? 'Permanent file deletion.'
+              : 'Review this change before applying.',
+    });
+    useAgentRunStore.getState().finishToolStep(stepId, 'awaiting_approval');
+  }
+
+  const approved = await approvalPromise;
+  if (approvalBlockId) {
+    useAgentRunStore.getState().removeApprovalBlock(approvalBlockId);
+  }
+  return approved;
 }
 
-function resolveModelForMode(model: string | undefined, agentMode: AgentMode): string | undefined {
+function resolveModelForMode(model: string | undefined, agentMode: AgentMode, prompt?: string, hasImages?: boolean): string | undefined {
   if (model && model !== 'auto') return model;
+  if (hasImages || (prompt && isUiRelatedTask(prompt))) return CLAUDE_UI_MODEL;
   switch (agentMode) {
     case 'fast':
-      return 'gemini-2.0-flash';
+      return 'gemini-2.5-flash';
     case 'deep':
       return 'claude-sonnet-4-20250514';
     case 'refactor':
@@ -193,8 +266,15 @@ export async function runAgent(options: {
   let context = options.context;
 
   const agentMode = options.agentMode ?? useAgentStateStore.getState().mode;
-  const model = resolveModelForMode(options.model, agentMode);
+  const model = resolveModelForMode(options.model, agentMode, prompt, !!images?.length);
   const MAX_STEPS = maxStepsForMode(agentMode);
+
+  const hasToken = !!apiClient.getToken();
+  const mockMode = !hasToken;
+
+  if (!mockMode) {
+    await useAuthStore.getState().ensureSession();
+  }
 
   const stateStore = useAgentStateStore.getState();
   stateStore.clearCancel();
@@ -270,6 +350,20 @@ export async function runAgent(options: {
     onProgress?.({ type: 'thinking', message: 'Planning task...' });
   }
 
+  if (mockMode) {
+    return runMockAgent({
+      prompt: userPrompt,
+      repositoryPath: repositoryPath!,
+      messages,
+      onProgress,
+      onFileChanged,
+      onRefreshGit,
+      onRefreshExplorer,
+      taskId,
+      stateStore,
+    });
+  }
+
   while (stepsUsed < MAX_STEPS) {
     if (useAgentStateStore.getState().cancelRequested) {
       cancelled = true;
@@ -336,8 +430,10 @@ export async function runAgent(options: {
         onProgress?.({ type: 'phase', phase });
 
         const activityMsg = TOOL_ACTIVITY[toolName]?.(args) || `${toolName}...`;
-        onProgress?.({ type: 'activity', message: activityMsg });
-        onProgress?.({ type: 'tool_start', toolName, path: filePath, provider: activeProvider, message: activityMsg });
+        const stepLabel = toolTitle(toolName);
+        const stepDetail = toolStepDetail(toolName, args);
+        const stepId = useAgentRunStore.getState().startToolStep(toolName, stepLabel, stepDetail);
+        onProgress?.({ type: 'tool_start', toolName, path: filePath, provider: activeProvider, message: activityMsg, stepId });
 
         const cardTitleFn = TOOL_CARD_TITLE[toolName];
         const cardTitle = cardTitleFn?.(args, true) || activityMsg.replace('...', '');
@@ -354,11 +450,11 @@ export async function runAgent(options: {
           originalContent = filePath ? await readOriginalContent(repositoryPath, filePath) : '';
         }
 
-        if (APPROVAL_TOOLS.has(toolName)) {
-          onProgress?.({ type: 'approval_needed', toolName, message: `Waiting for approval: ${toolName}` });
-          const approved = await requestToolApproval(tc, repositoryPath);
+        if (await toolNeedsApproval(toolName, tc.function.arguments, repositoryPath)) {
+          onProgress?.({ type: 'approval_needed', toolName, message: `Approve: ${stepLabel}` });
+          const approved = await requestToolApproval(tc, repositoryPath, stepId);
           if (!approved) {
-            result = { tool_call_id: tc.id, content: 'User rejected this action.', success: false };
+            result = { tool_call_id: tc.id, content: 'User skipped this action.', success: false };
           } else {
             result = await executeToolCall(tc, repositoryPath);
           }
@@ -367,6 +463,22 @@ export async function runAgent(options: {
         } else {
           result = await executeToolCall(tc, repositoryPath);
         }
+
+        persistToolCall({
+          id: tc.id,
+          sessionId: options.conversationId || 'local',
+          toolName,
+          arguments: tc.function.arguments,
+          result: result.content.slice(0, 4000),
+          success: result.success,
+          createdAt: new Date().toISOString(),
+        }).catch(() => {});
+
+        useAgentRunStore.getState().finishToolStep(
+          stepId,
+          result.success ? 'success' : APPROVAL_TOOLS.has(toolName) && !result.success ? 'skipped' : 'failed',
+          result.success ? undefined : result.content.slice(0, 200),
+        );
 
         useTaskStore.getState().updateCard(taskId, cardId, {
           status: result.success ? 'success' : 'failed',
@@ -456,4 +568,108 @@ export async function runAgent(options: {
   }
 
   return { content: finalContent, conversationId, stepsUsed, toolCallsMade, cancelled };
+}
+
+async function runMockAgent(opts: {
+  prompt: string;
+  repositoryPath: string;
+  messages: AgentMessage[];
+  onProgress?: (progress: AgentProgress) => void;
+  onFileChanged?: (path: string) => void;
+  onRefreshGit?: () => void;
+  onRefreshExplorer?: () => void;
+  taskId: string;
+  stateStore: ReturnType<typeof useAgentStateStore.getState>;
+}): Promise<AgentRunResult> {
+  const { prompt, repositoryPath, onProgress, onFileChanged, onRefreshGit, onRefreshExplorer, taskId, stateStore } = opts;
+  const toolCallsMade: string[] = [];
+  let streamedText = '';
+
+  for await (const event of mockAgentStream(prompt, opts.messages)) {
+    if (useAgentStateStore.getState().cancelRequested) {
+      onProgress?.({ type: 'error', message: 'Agent run cancelled.' });
+      useTaskStore.getState().completeTask(taskId, 'cancelled');
+      return { content: 'Cancelled.', stepsUsed: 0, toolCallsMade, cancelled: true };
+    }
+
+    switch (event.type) {
+      case 'status':
+        onProgress?.({ type: 'thinking', message: event.text });
+        break;
+      case 'message_delta':
+        streamedText += event.text;
+        onProgress?.({ type: 'content', content: streamedText });
+        break;
+      case 'tool_request': {
+        const tc = event.toolCall;
+        const toolName = tc.function.name;
+        const args = parseToolArgs(tc.function.arguments);
+        toolCallsMade.push(toolName);
+        const stepLabel = toolTitle(toolName);
+        const stepDetail = toolStepDetail(toolName, args);
+        const stepId = useAgentRunStore.getState().startToolStep(toolName, stepLabel, stepDetail);
+        onProgress?.({ type: 'tool_start', toolName, stepId, message: `${toolName}...` });
+
+        let approved = true;
+        if (await toolNeedsApproval(toolName, tc.function.arguments, repositoryPath)) {
+          onProgress?.({ type: 'approval_needed', toolName, message: `Approve: ${stepLabel}` });
+          approved = await requestToolApproval(tc, repositoryPath, stepId);
+        }
+
+        if (approved) {
+          const result = await executeToolCall(tc, repositoryPath);
+          useAgentRunStore.getState().finishToolStep(stepId, result.success ? 'success' : 'failed');
+          onProgress?.({ type: 'tool_done', toolName, success: result.success });
+          if (event.type === 'tool_request' && result.success) {
+            const filePath = (args.path || args.file) as string | undefined;
+            if (filePath && ['write_file', 'create_file', 'edit_file'].includes(toolName)) {
+              onFileChanged?.(filePath);
+              onRefreshExplorer?.();
+              onProgress?.({
+                type: 'file_edit',
+                path: filePath,
+                originalContent: '',
+                newContent: String(args.content ?? ''),
+              });
+            }
+            if (toolName === 'run_terminal') {
+              onProgress?.({
+                type: 'terminal',
+                command: String(args.command || ''),
+                output: result.content,
+                success: result.success,
+              });
+            }
+          }
+        } else {
+          useAgentRunStore.getState().finishToolStep(stepId, 'skipped');
+        }
+        break;
+      }
+      case 'diff':
+        onProgress?.({
+          type: 'file_edit',
+          path: event.filePath,
+          originalContent: event.oldText,
+          newContent: event.newText,
+        });
+        break;
+      case 'error':
+        onProgress?.({ type: 'error', message: event.message });
+        break;
+      case 'done':
+        stateStore.setPhase('completed');
+        useTaskStore.getState().completeTask(taskId, 'completed');
+        onProgress?.({ type: 'done', content: streamedText });
+        onRefreshGit?.();
+        onRefreshExplorer?.();
+        break;
+    }
+  }
+
+  return {
+    content: streamedText || 'Mock agent finished.',
+    stepsUsed: toolCallsMade.length,
+    toolCallsMade,
+  };
 }

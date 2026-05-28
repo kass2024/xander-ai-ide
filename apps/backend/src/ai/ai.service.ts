@@ -497,7 +497,7 @@ export class AiService {
   async checkUserQuota(userId: string): Promise<void> {
     const subscription = await this.usersService.getUserSubscription(userId);
     if (!subscription) {
-      throw new UnauthorizedException('No active subscription found');
+      throw new BadRequestException('No active subscription found');
     }
 
     // Check daily quota (simplified)
@@ -512,7 +512,7 @@ export class AiService {
     });
 
     if (dailyRequests >= dailyLimit) {
-      throw new UnauthorizedException('Daily quota exceeded. Upgrade your plan or purchase extra credits.');
+      throw new BadRequestException('Daily quota exceeded. Upgrade your plan or purchase extra credits.');
     }
   }
 
