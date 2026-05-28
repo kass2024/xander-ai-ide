@@ -49,19 +49,40 @@ docker compose -f docker-compose.prod.yml \
 | `apache/xanderai-online.conf` | Apache SSL + reverse proxy for Xander |
 | `scripts/fix-apache-docker-coexist.sh` | Automated migration |
 
-## SSL certificates
+## SSL certificates (enable HTTPS)
 
-- **Existing Apache certs** for parrot/xanderbot domains are **not touched**.
-- Xander (`xanderai.online`, `api.xanderai.online`) uses `/etc/letsencrypt/live/xanderai.online/` if present.
-- If certs only exist in Docker certbot (`certbot/conf/`), the script symlinks them for Apache.
+HTTP works but browser shows **Not secure** until Apache has Let's Encrypt certs for `xanderai.online`.
 
-Issue new certs (Apache owns port 80):
+**One command:**
 
 ```bash
-sudo certbot certonly --webroot -w /var/www/html \
-  -d xanderai.online -d www.xanderai.online -d api.xanderai.online
-sudo systemctl reload apache2
+cd /opt/xander-ai-ide
+git pull
+sudo bash scripts/setup-ssl-apache.sh
 ```
+
+The script uses webroot validation (Apache keeps port 80), installs SSL vhosts, and reloads Apache. Other domain certs are not touched.
+
+**Manual:**
+
+```bash
+sudo apt install -y certbot
+sudo certbot certonly --webroot -w /var/www/html \
+  -d xanderai.online -d www.xanderai.online -d api.xanderai.online \
+  --email admin@xanderai.online --agree-tos --no-eff-email
+sudo cp /opt/xander-ai-ide/apache/xanderai-online.conf /etc/apache2/sites-available/
+sudo a2enmod ssl && sudo systemctl reload apache2
+```
+
+Verify:
+
+```bash
+curl -I https://xanderai.online
+curl https://api.xanderai.online/health
+```
+
+- **Existing Apache certs** for parrot/xanderbot domains are **not touched**.
+- If certs only exist in Docker certbot (`certbot/conf/`), `setup-ssl-apache.sh` symlinks them automatically.
 
 ## Wrong site on xanderai.online (e.g. Parrot Canada)
 
