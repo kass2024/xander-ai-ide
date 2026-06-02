@@ -118,7 +118,7 @@ export async function indexProjectForSearch(
     options?.onProgress?.(pct, `Embedding batch ${b + 1}/${batches}...`);
 
     try {
-      const res = await apiClient.indexRepoChunks(projectPath, batch);
+      const res = await apiClient.indexRepoChunks(projectPath, batch, { userRequested: true });
       totalIndexed += res.chunksIndexed ?? batch.length;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Indexing failed';

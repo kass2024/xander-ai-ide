@@ -1,5 +1,6 @@
 import { getSemanticContextForQuery } from './codebaseSearch';
 import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
+import { useCodebaseIndexStore } from '../stores/codebaseIndexStore';
 
 const CODE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.php', '.cs',
@@ -128,7 +129,7 @@ export async function buildRichContext(options: {
     projectTree,
     projectSummary,
     directoryListing,
-    semanticContext: prompt && projectPath
+    semanticContext: prompt && projectPath && useCodebaseIndexStore.getState().status === 'ready'
       ? await getSemanticContextForQuery(prompt, 6)
       : undefined,
   };

@@ -51,6 +51,8 @@ export interface AutocompleteRequest {
   filename: string;
   language: string;
   maxTokens?: number;
+  /** Must be true — blocks idle/background autocomplete on the server. */
+  userRequested?: boolean;
 }
 
 export interface ComposerRequest {

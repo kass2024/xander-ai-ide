@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } f
 import * as monaco from 'monaco-editor';
 import { setupMonacoEnvironment } from '../monacoSetup';
 import apiClient from '../lib/api';
-import { debouncedAICompletion, cancelPendingAutocomplete } from '../lib/aiAutocomplete';
+import { debouncedAICompletion, cancelPendingAutocomplete, fetchUserRequestedCompletion } from '../lib/aiAutocomplete';
 import { isInlineAutocompleteEnabled } from '../stores/aiUsageStore';
 
 export interface MonacoEditorHandle {
@@ -212,7 +212,12 @@ export const MonacoEditor = forwardRef<MonacoEditorHandle, MonacoEditorProps>(fu
           const { prefix, suffix } = getContextAround(model, position);
           if (prefix.trim().length < 3) return { suggestions: [] };
 
-          const completion = await fetchAICompletionDirect(prefix, suffix);
+          const completion = await fetchUserRequestedCompletion({
+            prefix,
+            suffix,
+            filename: filePath || 'untitled.txt',
+            language,
+          });
           if (!completion) return { suggestions: [] };
 
           return {
@@ -243,20 +248,6 @@ export const MonacoEditor = forwardRef<MonacoEditorHandle, MonacoEditorProps>(fu
       editor.dispose();
     };
   }, []);
-
-  async function fetchAICompletionDirect(prefix: string, suffix: string) {
-    try {
-      const result = await apiClient.aiAutocomplete({
-        prefix,
-        suffix,
-        filename: filePath || 'untitled.txt',
-        language,
-      });
-      return result.completion?.trim() || null;
-    } catch {
-      return null;
-    }
-  }
 
   useEffect(() => {
     if (editorInstanceRef.current && isReady) {

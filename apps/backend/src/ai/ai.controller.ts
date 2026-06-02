@@ -14,6 +14,7 @@ import { AIRouter } from './ai.router';
 import { ProjectBuilderService, ProjectBuilderRequest } from './project-builder.service';
 import { MultiModelService } from './multi-model.service';
 import { formatSSE } from './stream.types';
+import { assertUserRequestedOpenAI } from './openai-request.guard';
 
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
@@ -151,6 +152,7 @@ export class AiController {
 
   @Post('autocomplete')
   async autocomplete(@Request() req, @Body() body: AutocompleteRequest): Promise<any> {
+    assertUserRequestedOpenAI(body, 'Autocomplete');
     return { completion: await this.aiService.autocomplete(req.user.id, body) };
   }
 

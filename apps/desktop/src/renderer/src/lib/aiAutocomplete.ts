@@ -14,7 +14,7 @@ export interface AutocompleteContext {
 export async function fetchAICompletion(ctx: AutocompleteContext): Promise<string | null> {
   if (!apiClient.getToken() || !isInlineAutocompleteEnabled()) return null;
   try {
-    const result = await apiClient.aiAutocomplete(ctx);
+    const result = await apiClient.aiAutocomplete({ ...ctx, userRequested: true });
     const text = result.completion?.trim();
     if (!text || text.length > 500) return null;
     return text;
@@ -37,4 +37,17 @@ export function debouncedAICompletion(ctx: AutocompleteContext, delayMs = 350): 
 export function cancelPendingAutocomplete() {
   if (debounceTimer) clearTimeout(debounceTimer);
   pendingId++;
+}
+
+/** Explicit Ctrl+Space — allowed even when inline autocomplete is off. */
+export async function fetchUserRequestedCompletion(ctx: AutocompleteContext): Promise<string | null> {
+  if (!apiClient.getToken()) return null;
+  try {
+    const result = await apiClient.aiAutocomplete({ ...ctx, userRequested: true });
+    const text = result.completion?.trim();
+    if (!text || text.length > 500) return null;
+    return text;
+  } catch {
+    return null;
+  }
 }

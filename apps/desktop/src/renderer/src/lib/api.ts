@@ -231,17 +231,24 @@ class ApiClient {
     );
   }
 
-  async indexRepoChunks(rootPath: string, chunks: Array<{ path: string; content: string; chunkIndex?: number }>) {
+  async indexRepoChunks(
+    rootPath: string,
+    chunks: Array<{ path: string; content: string; chunkIndex?: number }>,
+    options?: { userRequested?: boolean },
+  ) {
     return this.request<{ success: boolean; chunksIndexed?: number }>(
       '/repo/index-chunks',
-      { method: 'POST', body: JSON.stringify({ rootPath, chunks }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({ rootPath, chunks, userRequested: options?.userRequested ?? true }),
+      },
     );
   }
 
   async searchRepo(query: string, limit = 8) {
     return this.request<{ results: Array<{ path: string; content: string; score: number }> }>(
       '/repo/search',
-      { method: 'POST', body: JSON.stringify({ query, limit }) },
+      { method: 'POST', body: JSON.stringify({ query, limit, userRequested: true }) },
     );
   }
 
@@ -262,6 +269,7 @@ class ApiClient {
     filename: string;
     language: string;
     maxTokens?: number;
+    userRequested?: boolean;
   }) {
     return this.request<{ completion: string }>(
       '/ai/autocomplete',
