@@ -30,6 +30,31 @@ if echo "$PORTS" | grep -qE '0\.0\.0\.0:80|0\.0\.0\.0:443'; then
   exit 1
 fi
 
-curl -sf -H "Host: api.xanderai.online" "http://127.0.0.1:${DOCKER_NGINX_PORT}/health" \
-  && echo "==> API OK on 127.0.0.1:${DOCKER_NGINX_PORT}" \
-  || echo "WARN: health check failed — docker logs xander_backend --tail 40"
+echo ""
+echo "==> Waiting for backend (migrations + NestJS can take up to 2 min)..."
+BACKEND_OK=0
+for i in $(seq 1 60); do
+  if docker exec xander_backend wget -qO- http://localhost:3001/health/live >/dev/null 2>&1; then
+    BACKEND_OK=1
+    echo "==> Backend live after ${i} attempt(s)"
+    break
+  fi
+  sleep 3
+done
+
+if [ "$BACKEND_OK" -ne 1 ]; then
+  echo "ERROR: Backend did not become healthy — check logs:" >&2
+  docker logs xander_backend --tail 60
+  exit 1
+fi
+
+if curl -sf -H "Host: api.xanderai.online" "http://127.0.0.1:${DOCKER_NGINX_PORT}/health" >/dev/null; then
+  echo "==> API OK on 127.0.0.1:${DOCKER_NGINX_PORT}/health"
+  curl -s -H "Host: api.xanderai.online" "http://127.0.0.1:${DOCKER_NGINX_PORT}/health/ai" | head -c 400
+  echo ""
+else
+  echo "ERROR: nginx proxy health check failed — check:" >&2
+  echo "  docker logs xander_nginx --tail 20"
+  echo "  docker logs xander_backend --tail 40"
+  exit 1
+fi
