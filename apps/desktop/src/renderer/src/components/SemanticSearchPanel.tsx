@@ -19,11 +19,7 @@ export function SemanticSearchPanel({ projectPath, onOpenFile }: SemanticSearchP
 
   useEffect(() => {
     if (projectPath) {
-      checkSemanticSearchAvailable().then((ok) => {
-        if (ok && status === 'idle') {
-          indexProjectForSearch(projectPath).catch(() => { /* handled in store */ });
-        }
-      });
+      checkSemanticSearchAvailable().catch(() => {});
     }
   }, [projectPath]);
 

@@ -137,12 +137,6 @@ function App() {
     });
   }, [loadFiles, setCurrentProject]);
 
-  useEffect(() => {
-    if (currentProject && apiClient.getToken()) {
-      indexProjectForSearch(currentProject).catch(() => { /* optional */ });
-    }
-  }, [currentProject]);
-
   const handleWorkspaceReady = useCallback(async (path: string) => {
     setCurrentProject(path);
     await loadFiles(path);

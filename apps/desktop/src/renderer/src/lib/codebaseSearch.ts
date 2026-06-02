@@ -1,5 +1,6 @@
 import apiClient from './api';
 import { useCodebaseIndexStore } from '../stores/codebaseIndexStore';
+import { isAutoIndexingEnabled } from '../stores/aiUsageStore';
 
 const CODE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.php', '.cs',
@@ -49,6 +50,10 @@ export async function indexProjectForSearch(
   if (!qdrantOk) {
     store.setStatus('unavailable', 'Qdrant not configured on backend. Set QDRANT_URL in backend .env');
     return { success: false, message: 'Semantic search unavailable — start Qdrant on port 6333' };
+  }
+
+  if (!options?.force && !isAutoIndexingEnabled()) {
+    return { success: false, message: 'Auto-indexing is off. Enable in Settings or use Re-index Project.' };
   }
 
   if (

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useBillingStore } from '../stores/billingStore';
+import { useAiUsageStore } from '../stores/aiUsageStore';
 import apiClient, { configureApiClient, type Plan } from '../lib/api';
 import { getWebBaseUrl, PRODUCTION_API_URL } from '../lib/apiConfig';
 
@@ -32,6 +33,12 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
 
   const { user, isAuthenticated, loading: authLoading, error: authError, login, logout, loadSession } = useAuthStore();
   const { subscription, plans, usage, loading: billingLoading, fetchAll, changePlan } = useBillingStore();
+  const {
+    enableInlineAutocomplete,
+    enableAutoIndexing,
+    setEnableInlineAutocomplete,
+    setEnableAutoIndexing,
+  } = useAiUsageStore();
 
   const checkCloud = async () => {
     configureApiClient();
@@ -182,6 +189,42 @@ export function SettingsPanel({ onClose, initialTab = 'general' }: SettingsPanel
         >
           Manage Account
         </button>
+      </div>
+
+      <div className="rounded-lg border border-[var(--vscode-border)] p-5 space-y-4">
+        <h3 className="font-medium">OpenAI / API usage</h3>
+        <p className="text-sm text-[var(--vscode-descriptionForeground)]">
+          By default, OpenAI is only called when you send a chat message, run the agent, or use Composer.
+          Enable these only if you want background features (they use credits while idle).
+        </p>
+        <label className="flex items-start justify-between gap-4 text-sm">
+          <span>
+            Inline autocomplete while typing
+            <span className="block text-xs text-[var(--vscode-descriptionForeground)] mt-0.5">
+              Ghost-text suggestions as you type. Uses API on every pause.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={enableInlineAutocomplete}
+            onChange={(e) => setEnableInlineAutocomplete(e.target.checked)}
+            className="accent-blue-500 mt-1 shrink-0"
+          />
+        </label>
+        <label className="flex items-start justify-between gap-4 text-sm">
+          <span>
+            Auto-index project on open
+            <span className="block text-xs text-[var(--vscode-descriptionForeground)] mt-0.5">
+              Embeds code for semantic search when a folder opens. Use Re-index Project manually instead.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={enableAutoIndexing}
+            onChange={(e) => setEnableAutoIndexing(e.target.checked)}
+            className="accent-blue-500 mt-1 shrink-0"
+          />
+        </label>
       </div>
 
       <div className="rounded-lg border border-[var(--vscode-border)] p-5 space-y-4">

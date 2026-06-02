@@ -1,4 +1,5 @@
 import apiClient from './api';
+import { isInlineAutocompleteEnabled } from '../stores/aiUsageStore';
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingId = 0;
@@ -11,7 +12,7 @@ export interface AutocompleteContext {
 }
 
 export async function fetchAICompletion(ctx: AutocompleteContext): Promise<string | null> {
-  if (!apiClient.getToken()) return null;
+  if (!apiClient.getToken() || !isInlineAutocompleteEnabled()) return null;
   try {
     const result = await apiClient.aiAutocomplete(ctx);
     const text = result.completion?.trim();

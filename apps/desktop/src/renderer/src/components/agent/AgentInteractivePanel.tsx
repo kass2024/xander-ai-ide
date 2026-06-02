@@ -21,7 +21,7 @@ import { displayModelLabel, type ModelOption } from '../../lib/modelLabels';
 import { useAgentRunStore, AgentBlock, getDiffStats } from '../../stores/agentRunStore';
 import { useActionStore } from '../../stores/actionStore';
 import { runAgent, AgentProgress } from '../../lib/agentRunner';
-import { buildRichContext, indexProjectForSearch } from '../../lib/projectContext';
+import { buildRichContext } from '../../lib/projectContext';
 import { useAgentStore } from '../../stores/agentStore';
 import { useAgentStateStore, type AgentMode, PHASE_LABELS } from '../../stores/agentStateStore';
 import { TaskProgressPanel } from './TaskProgressPanel';
@@ -308,10 +308,6 @@ function AgentInteractivePanel({
     }, 800);
     return () => clearInterval(id);
   }, [isRunning]);
-
-  useEffect(() => {
-    if (projectPath) indexProjectForSearch(projectPath).catch(() => {});
-  }, [projectPath]);
 
   const injectPrompt = useAgentUiStore((s) => s.injectPrompt);
   const injectSend = useAgentUiStore((s) => s.injectSend);

@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor';
 import { setupMonacoEnvironment } from '../monacoSetup';
 import apiClient from '../lib/api';
 import { debouncedAICompletion, cancelPendingAutocomplete } from '../lib/aiAutocomplete';
+import { isInlineAutocompleteEnabled } from '../stores/aiUsageStore';
 
 export interface MonacoEditorHandle {
   undo: () => void;
@@ -51,7 +52,7 @@ const EDITOR_OPTS: monaco.editor.IStandaloneEditorConstructionOptions = {
     showIcons: true,
   },
   quickSuggestions: { other: true, comments: false, strings: true },
-  inlineSuggest: { enabled: true, mode: 'prefix' },
+  inlineSuggest: { enabled: false, mode: 'prefix' },
   parameterHints: { enabled: true },
   hover: { enabled: true },
   padding: { top: 10, bottom: 10 },
@@ -170,10 +171,10 @@ export const MonacoEditor = forwardRef<MonacoEditorHandle, MonacoEditorProps>(fu
       }),
       editor.onDidChangeModelContent(() => onChange?.(editor.getValue())),
 
-      // AI inline ghost-text completions (Copilot-style)
+      // AI inline ghost-text completions — only when enabled in Settings (off by default)
       monaco.languages.registerInlineCompletionsProvider({ pattern: '**' }, {
         provideInlineCompletions: async (model, position, _ctx, token) => {
-          if (!apiClient.getToken() || readOnly) return { items: [] };
+          if (!apiClient.getToken() || readOnly || !isInlineAutocompleteEnabled()) return { items: [] };
           const { prefix, suffix } = getContextAround(model, position);
           if (prefix.trim().length < 2) return { items: [] };
 
@@ -201,11 +202,13 @@ export const MonacoEditor = forwardRef<MonacoEditorHandle, MonacoEditorProps>(fu
         disposeInlineCompletions: () => {},
       }),
 
-      // AI completion on Ctrl+Space / trigger suggest
+      // AI completion on Ctrl+Space only (explicit user action — no auto trigger on typing)
       monaco.languages.registerCompletionItemProvider('*', {
-        triggerCharacters: ['.', '(', '[', '{', ' ', '\n'],
-        provideCompletionItems: async (model, position) => {
+        provideCompletionItems: async (model, position, _context, token) => {
           if (!apiClient.getToken() || readOnly) return { suggestions: [] };
+          if (token.triggerKind !== monaco.languages.CompletionTriggerKind.Invoke) {
+            return { suggestions: [] };
+          }
           const { prefix, suffix } = getContextAround(model, position);
           if (prefix.trim().length < 3) return { suggestions: [] };
 

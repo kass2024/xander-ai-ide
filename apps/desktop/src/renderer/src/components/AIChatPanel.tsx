@@ -4,7 +4,7 @@ import { useAgentStore } from '../stores/agentStore';
 import { ComposerDiffPanel } from './ComposerDiffPanel';
 import { ComposerChange, parseComposerResponse } from '../lib/composerUtils';
 import { runAgent, AgentProgress } from '../lib/agentRunner';
-import { buildRichContext, gatherComposerFiles, indexProjectForSearch } from '../lib/projectContext';
+import { buildRichContext, gatherComposerFiles } from '../lib/projectContext';
 import { PendingActionsPanel } from './PendingActionsPanel';
 import { applyActionsDirectly } from '../lib/parseActions';
 import { GenerationProgressPanel, runProjectBuilder, runComposerStream } from './GenerationProgressPanel';
@@ -88,7 +88,7 @@ interface ModelOption {
 const WELCOME: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hello! I\'m **Xander Assistant**.\n\n- **Chat**: Ask questions about your code\n- **Agent**: Deep project work — analyzes files, edits, tests, git commit/push\n- **Composer**: Multi-file edits with diff review\n\nAgent can open your last project or pick a folder on first run. Sign in via Settings for API access. **Tab** accepts inline suggestions.',
+  content: 'Hello! I\'m **Xander Assistant**.\n\n- **Chat**: Ask questions about your code\n- **Agent**: Deep project work — analyzes files, edits, tests, git commit/push\n- **Composer**: Multi-file edits with diff review\n\nOpenAI is only used when you send a message or run the agent. Optional inline autocomplete is off by default (Settings → General). **Ctrl+Space** requests an AI suggestion in the editor.',
   timestamp: new Date(),
   type: 'markdown',
 };
@@ -150,11 +150,6 @@ export function AIChatPanel({ onCodeSuggestion, onFileCreate, onComposerApply, o
     const id = setInterval(check, 30000);
     return () => clearInterval(id);
   }, []);
-
-  useEffect(() => {
-    if (!projectPath) return;
-    indexProjectForSearch(projectPath).catch(() => { /* optional Qdrant indexing */ });
-  }, [projectPath]);
 
   useEffect(() => {
     if (!agentSessionId) {

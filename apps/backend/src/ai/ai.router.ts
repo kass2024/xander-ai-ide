@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { ConfigService } from '@nestjs/config';
+import { normalizeOpenAIKey } from './model.utils';
 
 export interface AIRequest {
   prompt: string;
@@ -258,29 +259,13 @@ export class AIRouter {
     return (tokens / 1000) * (costs[model] || 0.01);
   }
 
-  // Health check for AI services
+  /** Config-only health check — never calls OpenAI (avoids idle API usage). */
   async checkHealth(): Promise<{ status: string; models: string[] }> {
-    const availableModels = [];
-    
-    try {
-      // Test main model
-      await this.openai.models.retrieve(this.models.main);
-      availableModels.push(this.models.main);
-    } catch (error) {
-      console.error('Main model unavailable:', error);
-    }
-
-    try {
-      // Test mini model
-      await this.openai.models.retrieve(this.models.mini);
-      availableModels.push(this.models.mini);
-    } catch (error) {
-      console.error('Mini model unavailable:', error);
-    }
-
+    const hasKey = !!normalizeOpenAIKey(this.configService.get<string>('OPENAI_API_KEY'));
+    const models = hasKey ? [this.models.main, this.models.mini].filter(Boolean) : [];
     return {
-      status: availableModels.length > 0 ? 'healthy' : 'unhealthy',
-      models: availableModels
+      status: hasKey ? 'configured' : 'unconfigured',
+      models,
     };
   }
 }
