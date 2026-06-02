@@ -21,6 +21,9 @@ sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sud
 
 ## Deploy / update
 
+**Docker never uses public port 80 or 443.** Apache keeps those for Parrot and other sites.
+Xander Docker nginx binds **`127.0.0.1:8088`** only.
+
 ```bash
 cd /opt
 git clone https://github.com/kass2024/xander-ai-ide.git   # first time only
@@ -32,6 +35,12 @@ chmod +x scripts/init-env-production.sh && ./scripts/init-env-production.sh
 nano .env.production   # change defaults before production traffic
 
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+**First deploy or after port-80 conflict:** install Apache proxy vhost:
+
+```bash
+sudo bash scripts/vps-docker-8088-recover.sh
 ```
 
 ## Required `.env.production`
@@ -54,46 +63,38 @@ RUN_SEED=true
 
 **Stripe webhook URL:** `https://api.xanderai.online/billing/webhook`
 
-## Docker services (virtual hosts in `nginx.prod.conf`)
+## Docker services
 
-| Container | Port | Domain |
+| Container | Port | Notes |
 |-----------|------|--------|
-| xander_nginx | 80, 443 | routes traffic |
-| xander_web | 3000 | xanderai.online, www |
-| xander_backend | 3001 | api.xanderai.online |
+| xander_nginx | **127.0.0.1:8088** | Apache proxies xanderai.online here |
+| xander_web | 3000 (internal) | Next.js |
+| xander_backend | 3001 (internal) | Nest API |
 | xander_postgres | internal | DB |
 | xander_redis | internal | cache |
 | xander_qdrant | internal | vector search |
 
-## HTTPS / SSL (go live)
+## HTTPS / SSL (Apache — not Docker)
 
-See **`SSL-XANDERAI.md`** or run:
+Apache terminates SSL for `xanderai.online`, `api.xanderai.online`.
+Docker stays on **8088** only.
 
 ```bash
-chmod +x scripts/setup-ssl.sh
-CERTBOT_EMAIL=admin@xanderai.online ./scripts/setup-ssl.sh
+sudo bash scripts/setup-ssl-apache.sh
+# or see APACHE-DOCKER-COEXIST.md
 ```
 
-## Port 80 already in use (Apache / nginx on host)
+## Apache + Docker (required on this VPS)
 
-If the VPS already serves **parrotcanada.site**, **parrotmoc.online**, etc. via **Apache**, do **not** stop Apache or let Docker bind 80/443.
-
-Use the Apache + Docker coexist guide:
+Apache owns **80/443** for parrotcanada.site, parrotmoc.online, etc.
+**Never stop Apache** or let Docker bind 80/443.
 
 ```bash
 cd /opt/xander-ai-ide && git pull
-sudo bash scripts/fix-apache-docker-coexist.sh
+sudo bash scripts/vps-docker-8088-recover.sh
 ```
 
 See **`APACHE-DOCKER-COEXIST.md`**.
-
-For a **dedicated** VPS with no other sites, you may stop host nginx/Apache instead:
-
-```bash
-sudo ss -tlnp | grep ':80 '
-sudo systemctl stop nginx apache2 2>/dev/null
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d nginx
-```
 
 ## Verify
 
@@ -121,7 +122,7 @@ Common causes:
 | `POSTGRES_PASSWORD` changed after first deploy | Postgres volume keeps old password — reset volume or revert password |
 | `password authentication failed` | `POSTGRES_PASSWORD` in `.env.production` must match what postgres was created with |
 | `bcrypt_lib.node` / `Cannot find module bcrypt` | Rebuild backend image after pull (`npm rebuild bcrypt` fix in Dockerfile) |
-| `address already in use` on port 80 | Stop host nginx/Apache (see above) |
+| `address already in use` on port 80 | Old compose tried public :80 — `git pull` and run `sudo bash scripts/vps-docker-8088-recover.sh` |
 
 ```bash
 chmod +x scripts/vps-backend-logs.sh

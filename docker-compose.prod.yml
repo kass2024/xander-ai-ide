@@ -1,7 +1,13 @@
 # Xander AI IDE — Production Docker Compose (VPS)
+#
+# NEVER binds public 80/443 — Apache on the host owns those ports (Parrot sites, etc.).
+# Docker nginx listens on 127.0.0.1:8088 only; Apache proxies xanderai.online → :8088.
+#
 # Usage:
 #   cp .env.production.example .env.production
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# One-shot recover (nginx + Apache vhost): sudo bash scripts/vps-docker-8088-recover.sh
 
 services:
   postgres:
@@ -106,11 +112,10 @@ services:
     container_name: xander_nginx
     restart: unless-stopped
     ports:
-      - '80:80'
-      # 443 added via docker-compose.ssl.yml after Let's Encrypt (setup-ssl.sh)
+      # Localhost only — Apache terminates SSL and reverse-proxies here
+      - '127.0.0.1:${DOCKER_NGINX_PORT:-8088}:80'
     volumes:
-      - ${NGINX_CONFIG:-./nginx.prod.conf}:/etc/nginx/nginx.conf:ro
-      - ./certbot/www:/var/www/certbot:ro
+      - ${NGINX_CONFIG:-./nginx.apache-proxy.conf}:/etc/nginx/nginx.conf:ro
     depends_on:
       - web
       - backend

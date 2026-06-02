@@ -1,7 +1,5 @@
-# After Let's Encrypt: use with NGINX_CONFIG=./nginx.ssl.conf in .env.production
-services:
-  nginx:
-    ports:
-      - '443:443'
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt:ro
+# DEPRECATED on Apache VPS — do NOT use. Apache owns 443; Docker stays on 127.0.0.1:8088.
+# SSL: scripts/setup-ssl-apache.sh or certbot on the host + apache/xanderai-online.conf
+#
+# This file is kept for reference only. Using it would bind Docker to public 443 and
+# conflict with Apache + other sites.
