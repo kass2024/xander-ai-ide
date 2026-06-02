@@ -30,12 +30,10 @@ export default defineConfig({
     },
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(
-        process.env.VITE_API_URL ||
-          (process.env.NODE_ENV === 'production' ? 'https://api.xanderai.online' : 'http://localhost:3001'),
+        process.env.VITE_API_URL || 'https://api.xanderai.online',
       ),
       'import.meta.env.VITE_WEB_URL': JSON.stringify(
-        process.env.VITE_WEB_URL ||
-          (process.env.NODE_ENV === 'production' ? 'https://xanderai.online' : 'http://localhost:3000'),
+        process.env.VITE_WEB_URL || 'https://xanderai.online',
       ),
     },
     worker: {

@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { TitleBar } from './components/TitleBar';
-import { ActivityBar } from './components/ActivityBar';
-import { FileExplorer } from './components/FileExplorer';
-import type { MonacoEditorHandle } from './components/MonacoEditor';
 import { EditorTabs } from './components/EditorTabs';
-import { AIChatPanel } from './components/AIChatPanel';
 import { ResizablePanel } from './components/ResizablePanel';
 import { BottomPanel, BottomPanelHandle, BottomPanelTab } from './components/BottomPanel';
 import { StatusBar } from './components/StatusBar';
-import { GitPanel } from './components/GitPanel';
 import { SettingsPanel } from './components/SettingsPanel';
-import { SearchPanel } from './components/SearchPanel';
 import { AgentPage } from './pages/AgentPage';
-import { AgentsPanel } from './components/AgentsPanel';
+import { RightSidebar, type RightPanelTab } from './components/RightSidebar';
+import { CursorWelcome } from './components/CursorWelcome';
 import { useProjectStore } from './stores/projectStore';
 import { joinPath } from './lib/fileTree';
 import { dedupeOpenFiles, findOpenFile, filePathKey, resolveProjectPath } from './lib/filePath';
@@ -26,6 +21,7 @@ import apiClient, { configureApiClient } from './lib/api';
 import { saveLastWorkspace, restoreLastWorkspaceIfAny } from './lib/workspaceManager';
 import { MenuActionId } from './lib/menuActions';
 import { FileItem } from '../types';
+import type { MonacoEditorHandle } from './components/MonacoEditor';
 import './styles/theme.css';
 
 const MonacoEditor = lazy(() =>
@@ -42,11 +38,11 @@ interface OpenFile {
 }
 
 function App() {
-  const [activeView, setActiveView] = useState('explorer');
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('explorer');
   const [activeTab, setActiveTab] = useState('');
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [showChat, setShowChat] = useState(true);
+  const [showAgentPanel, setShowAgentPanel] = useState(true);
+  const [showExplorer, setShowExplorer] = useState(true);
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>('terminal');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -62,7 +58,6 @@ function App() {
   const [autoSave, setAutoSave] = useState(false);
   const [selectedCode, setSelectedCode] = useState('');
   const [breakpoints, setBreakpoints] = useState<Record<string, number[]>>({});
-  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [navHistory, setNavHistory] = useState<string[]>([]);
   const [navIndex, setNavIndex] = useState(-1);
 
@@ -80,15 +75,17 @@ function App() {
   } = useProjectStore();
   const { loadSession } = useAuthStore();
   const { subscription, fetchAll } = useBillingStore();
-  const { createSession, setActiveSession } = useAgentStore();
+  const { createSession, activeSessionId } = useAgentStore();
   const indexStatus = useCodebaseIndexStore((s) => s.status);
   const indexChunks = useCodebaseIndexStore((s) => s.chunksIndexed);
 
   useEffect(() => {
-    if (import.meta.env.PROD) {
-      localStorage.removeItem('xander_api_base_url');
-      localStorage.removeItem('xander_web_base_url');
+    if (!isAgentWindow && !activeSessionId) {
+      createSession('New Agent', 'agent', currentProject || undefined);
     }
+  }, [isAgentWindow, activeSessionId, createSession, currentProject]);
+
+  useEffect(() => {
     configureApiClient();
     loadSession().then(() => fetchAll());
 
@@ -143,18 +140,6 @@ function App() {
     setExpandedFolders((prev) => new Set([...prev, path]));
     saveLastWorkspace(path);
   }, [loadFiles, setCurrentProject]);
-
-  useEffect(() => {
-    if (activeView === 'terminal') {
-      setShowBottomPanel(true);
-      setBottomPanelTab('terminal');
-    }
-    if (activeView === 'settings') {
-      setShowSettings(true);
-      setSettingsTab('general');
-      setActiveView('explorer');
-    }
-  }, [activeView]);
 
   const handleFolderToggle = async (folderPath: string) => {
     const isExpanded = expandedFolders.has(folderPath);
@@ -422,14 +407,14 @@ function App() {
       case 'edit.paste': editorRef.current?.paste(); break;
       case 'edit.find': editorRef.current?.find(); break;
       case 'edit.replace': editorRef.current?.replace(); break;
-      case 'edit.findInFiles': setActiveView('search'); setShowSidebar(true); break;
+      case 'edit.findInFiles': setShowExplorer(true); setRightPanelTab('search'); break;
       case 'edit.commandPalette': setShowCommandPalette(true); break;
       case 'selection.selectAll': editorRef.current?.selectAll(); break;
       case 'selection.expandSelection': editorRef.current?.expandSelection(); break;
-      case 'view.toggleExplorer': setShowSidebar(true); setActiveView('explorer'); break;
-      case 'view.toggleSearch': setShowSidebar(true); setActiveView('search'); break;
-      case 'view.toggleAgents': setShowSidebar(true); setActiveView('agents'); setShowChat(true); break;
-      case 'view.toggleAI': setShowChat((v) => !v); break;
+      case 'view.toggleExplorer': setShowExplorer((v) => !v); setRightPanelTab('explorer'); break;
+      case 'view.toggleSearch': setShowExplorer(true); setRightPanelTab('search'); break;
+      case 'view.toggleAgents': setShowAgentPanel((v) => !v); break;
+      case 'view.toggleAI': setShowAgentPanel((v) => !v); break;
       case 'view.toggleTerminal': setShowBottomPanel(true); setBottomPanelTab('terminal'); bottomPanelRef.current?.focusTerminal(); break;
       case 'view.toggleProblems': setShowBottomPanel(true); setBottomPanelTab('problems'); break;
       case 'view.toggleOutput': setShowBottomPanel(true); setBottomPanelTab('output'); break;
@@ -561,12 +546,8 @@ function App() {
         break;
       }
       case 'agent.new': {
-        const id = createSession(undefined, 'agent', currentProject || undefined);
-        setActiveAgentId(id);
-        setActiveSession(id);
-        setActiveView('agents');
-        setShowSidebar(true);
-        setShowChat(true);
+        createSession('New Agent', 'agent', currentProject || undefined);
+        setShowAgentPanel(true);
         break;
       }
       case 'help.about':
@@ -598,11 +579,12 @@ function App() {
       if (mod && e.key === 'o' && !e.shiftKey) { e.preventDefault(); handleOpenFile(); }
       if (mod && e.key === 'n') { e.preventDefault(); handleNewFile(); }
       if (mod && e.key === 'p') { e.preventDefault(); setShowGoToFile(true); }
-      if (mod && e.key === '`') { e.preventDefault(); setShowBottomPanel(true); setBottomPanelTab('terminal'); }
-      if (mod && e.shiftKey && e.key === 'E') { e.preventDefault(); setShowSidebar((v) => !v); }
+      if (mod && e.key === '`') { e.preventDefault(); setShowBottomPanel((v) => !v); if (!showBottomPanel) setBottomPanelTab('terminal'); }
+      if (mod && e.key === 'j') { e.preventDefault(); setShowBottomPanel((v) => !v); if (!showBottomPanel) setBottomPanelTab('terminal'); }
+      if (mod && e.shiftKey && e.key === 'E') { e.preventDefault(); setShowExplorer((v) => !v); }
       if (mod && e.shiftKey && e.key === 'P') { e.preventDefault(); setShowCommandPalette(true); }
       if (mod && e.shiftKey && e.key === 'L') { e.preventDefault(); handleMenuAction('agent.new'); }
-      if (mod && e.shiftKey && e.key === 'G') { e.preventDefault(); setShowSidebar(true); setActiveView('agents'); setShowChat(true); }
+      if (mod && e.altKey && e.key === 'l') { e.preventDefault(); setShowAgentPanel((v) => !v); }
       if (mod && e.shiftKey && e.key === '5') { e.preventDefault(); bottomPanelRef.current?.splitTerminal(); }
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); handleMenuAction('go.goBack'); }
       if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); handleMenuAction('go.goForward'); }
@@ -629,7 +611,7 @@ function App() {
     { label: 'New Terminal', action: () => handleMenuAction('terminal.new') },
     { label: 'Split Terminal', action: () => handleMenuAction('terminal.split') },
     { label: 'New Agent', action: () => handleMenuAction('agent.new') },
-    { label: 'Semantic Codebase Search', action: () => { setShowSidebar(true); setActiveView('search'); } },
+    { label: 'Semantic Codebase Search', action: () => { setShowExplorer(true); setRightPanelTab('search'); } },
     { label: 'Re-index Project', action: () => currentProject && indexProjectForSearch(currentProject, { force: true }) },
     { label: 'Go to File', action: () => setShowGoToFile(true) },
     { label: 'Toggle Terminal', action: () => handleMenuAction('view.toggleTerminal') },
@@ -674,51 +656,6 @@ function App() {
     );
   }
 
-  const renderSidebar = () => {
-    switch (activeView) {
-      case 'git':
-        return <GitPanel projectPath={currentProject} />;
-      case 'search':
-        return <SearchPanel projectPath={currentProject} onOpenFile={(p) => openFileByPath(p)} />;
-      case 'agents':
-        return (
-          <AgentsPanel
-            projectPath={currentProject}
-            onOpenAgent={(id) => { setActiveAgentId(id); setActiveSession(id); setShowChat(true); }}
-            onNewAgentWindow={() => window.electronAPI.windowNewAgent()}
-          />
-        );
-      case 'terminal':
-        return (
-          <FileExplorer
-            files={files}
-            loading={loading}
-            onFileSelect={handleFileSelect}
-            expandedFolders={expandedFolders}
-            onFolderToggle={handleFolderToggle}
-            loadingDirs={loadingDirs}
-            workspaceName={workspaceName}
-            projectPath={currentProject}
-            onRefresh={() => currentProject && refreshTree()}
-          />
-        );
-      default:
-        return (
-          <FileExplorer
-            files={files}
-            loading={loading}
-            onFileSelect={handleFileSelect}
-            expandedFolders={expandedFolders}
-            onFolderToggle={handleFolderToggle}
-            loadingDirs={loadingDirs}
-            workspaceName={workspaceName}
-            projectPath={currentProject}
-            onRefresh={() => currentProject && refreshTree()}
-          />
-        );
-    }
-  };
-
   return (
     <div className="h-screen flex flex-col bg-[var(--vscode-editor-background)] text-[var(--vscode-foreground)] relative">
       <TitleBar
@@ -732,13 +669,31 @@ function App() {
         onMenuAction={handleMenuAction}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        <ActivityBar activeView={activeView} onViewChange={setActiveView} />
-
-        {showSidebar && (
-          <div className="w-64 border-r border-[var(--vscode-sideBar-border)] bg-[var(--vscode-sideBar-background)] overflow-hidden">
-            {renderSidebar()}
-          </div>
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {showAgentPanel && (
+          <ResizablePanel
+            edge="right"
+            defaultWidth={440}
+            minWidth={320}
+            maxWidth={720}
+            storageKey="xander-agent-width"
+            className="border-r border-[#2a2a2a]"
+          >
+            <AgentPage
+              projectPath={currentProject}
+              workspaceFolders={workspaceFolders}
+              openFiles={openFiles}
+              currentFilePath={currentFile?.filePath}
+              selectedCode={selectedCode}
+              onFileChanged={handleAgentFileChanged}
+              onOpenFile={handleOpenGeneratedFile}
+              onRefreshExplorer={() => refreshTree()}
+              onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
+              onRefreshGit={() => refreshGitStatus()}
+              onWorkspaceReady={handleWorkspaceReady}
+              onNewAgentWindow={() => window.electronAPI.windowNewAgent()}
+            />
+          </ResizablePanel>
         )}
 
         <div className="flex-1 flex flex-col relative min-w-0">
@@ -776,17 +731,7 @@ function App() {
                 />
               </Suspense>
             ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center max-w-md">
-                  <h1 className="text-2xl font-semibold mb-2">Welcome to Xander AI IDE</h1>
-                  <p className="text-sm mb-6 text-[var(--vscode-descriptionForeground)]">
-                    Use the menu bar: File → Open Folder, or press Ctrl+O / Ctrl+P
-                  </p>
-                  <button onClick={handleOpenProject} className="px-4 py-2 bg-[var(--vscode-button-background)] text-white rounded">
-                    Open Folder
-                  </button>
-                </div>
-              </div>
+              <CursorWelcome onOpenFolder={handleOpenProject} />
             )}
           </div>
 
@@ -846,32 +791,27 @@ function App() {
           )}
         </div>
 
-        {showChat && (
+        {showExplorer && (
           <ResizablePanel
             edge="left"
-            defaultWidth={380}
-            minWidth={300}
-            maxWidth={800}
-            storageKey="xander-chat-width"
-            className="border-l border-[var(--vscode-panel-border)]"
+            defaultWidth={280}
+            minWidth={220}
+            maxWidth={480}
+            storageKey="xander-explorer-width"
           >
-            <AIChatPanel
-              currentFilePath={currentFile?.filePath}
-              selectedCode={selectedCode}
+            <RightSidebar
+              activeTab={rightPanelTab}
+              onTabChange={setRightPanelTab}
               projectPath={currentProject}
-              workspaceFolders={workspaceFolders}
-              agentSessionId={activeAgentId}
-              openFiles={openFiles}
-              onComposerApply={handleComposerApply}
-              onFileChanged={handleAgentFileChanged}
-              onOpenFile={handleOpenGeneratedFile}
-              onRefreshExplorer={() => refreshTree()}
-              onRunTerminal={(cmd) => bottomPanelRef.current?.runInTerminal(cmd)}
-              onRefreshGit={() => refreshGitStatus()}
-              onWorkspaceReady={handleWorkspaceReady}
-              onCodeSuggestion={(code) => {
-                if (currentFile) editorRef.current?.insertAtCursor(code);
-              }}
+              workspaceName={workspaceName}
+              files={files}
+              loading={loading}
+              expandedFolders={expandedFolders}
+              loadingDirs={loadingDirs}
+              onFileSelect={handleFileSelect}
+              onFolderToggle={handleFolderToggle}
+              onRefresh={() => currentProject && refreshTree()}
+              onOpenFile={(p) => openFileByPath(p)}
             />
           </ResizablePanel>
         )}

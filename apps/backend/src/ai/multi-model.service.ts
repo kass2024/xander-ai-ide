@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { normalizeOpenAIKey, resolveOpenAIModel, getModelFallbacks, resolveGeminiModel, getGeminiFallbacks } from './model.utils';
@@ -51,7 +51,8 @@ export interface StreamChunk {
 }
 
 @Injectable()
-export class MultiModelService {
+export class MultiModelService implements OnModuleInit {
+  private readonly logger = new Logger(MultiModelService.name);
   private openai: OpenAI | null = null;
   private anthropicKey: string | null = null;
   private geminiKey: string | null = null;
@@ -61,6 +62,14 @@ export class MultiModelService {
     if (openaiKey) this.openai = new OpenAI({ apiKey: openaiKey });
     this.anthropicKey = config.get<string>('ANTHROPIC_API_KEY') || null;
     this.geminiKey = config.get<string>('GEMINI_API_KEY') || config.get<string>('GOOGLE_AI_API_KEY') || null;
+  }
+
+  onModuleInit() {
+    const s = this.getProvidersStatus();
+    const m = this.getDefaultModels();
+    this.logger.log(
+      `AI providers — OpenAI: ${s.openai ? m.agent : 'off'} | Claude: ${s.anthropic ? m.claude : 'off'} | Gemini: ${s.google ? m.gemini : 'off'}`,
+    );
   }
 
   getProvidersStatus() {
@@ -127,8 +136,8 @@ export class MultiModelService {
         case 'standard':
         default:
           if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          if (this.openai) return { provider: 'openai', model: defaults.agent };
           if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+          if (this.openai) return { provider: 'openai', model: defaults.agent };
           if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
           break;
       }
@@ -150,8 +159,8 @@ export class MultiModelService {
         return { provider: 'openai', model: defaults.agent };
       case 'agent':
         if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-        if (this.openai) return { provider: 'openai', model: defaults.agent };
         if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+        if (this.openai) return { provider: 'openai', model: defaults.agent };
         if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
         return { provider: 'openai', model: defaults.agent };
       case 'composer':

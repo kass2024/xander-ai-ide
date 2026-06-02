@@ -16,6 +16,8 @@
     "dist": "cd apps/desktop && npm run dist:win",
     "docker:infra": "docker compose up -d",
     "docker:prod": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
+    "sync:env": "powershell -ExecutionPolicy Bypass -File scripts/sync-env-linux.ps1",
+    "deploy:env": "powershell -ExecutionPolicy Bypass -File scripts/prepare-server-env.ps1",
     "docker:prod:down": "docker compose -f docker-compose.prod.yml down",
     "db:migrate": "cd apps/backend && npx prisma migrate deploy",
     "db:seed": "cd apps/backend && npx tsx prisma/seed.ts",

@@ -1,12 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { MultiModelService } from '../ai/multi-model.service';
 
 @Controller('health')
 export class HealthController {
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
+    private multiModel: MultiModelService,
   ) {}
 
   /** Liveness probe — no DB/Redis; used by Docker healthcheck */
@@ -34,6 +36,22 @@ export class HealthController {
       timestamp: new Date().toISOString(),
       service: 'xander-ai-ide-backend',
       checks: { database: db, redis },
+    };
+  }
+
+  @Get('ai')
+  aiProviders() {
+    const providers = this.multiModel.getProvidersStatus();
+    const models = this.multiModel.getDefaultModels();
+    return {
+      status: providers.openai || providers.anthropic || providers.google ? 'ready' : 'unconfigured',
+      providers,
+      models: {
+        openai: { agent: models.agent, fast: models.fast, embedding: models.embedding },
+        anthropic: models.claude,
+        google: models.gemini,
+      },
+      routing: 'auto — OpenAI agent, Claude UI/deep/refactor, Gemini fast/analysis',
     };
   }
 

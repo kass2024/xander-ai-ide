@@ -6,17 +6,15 @@ function normalizeBase(url: string): string {
   return url.trim().replace(/\/$/, '');
 }
 
-/** Packaged app always uses production API. Dev uses localhost unless VITE_API_URL is set. */
+/** Always use live production API unless VITE_API_URL is set explicitly. */
 export function getApiBaseUrl(): string {
-  if (import.meta.env.PROD) return PRODUCTION_API_URL;
   const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
   if (fromEnv) return normalizeBase(fromEnv);
-  return 'http://localhost:3001';
+  return PRODUCTION_API_URL;
 }
 
 export function getWebBaseUrl(): string {
-  if (import.meta.env.PROD) return PRODUCTION_WEB_URL;
   const fromEnv = import.meta.env.VITE_WEB_URL as string | undefined;
   if (fromEnv) return normalizeBase(fromEnv);
-  return 'http://localhost:3000';
+  return PRODUCTION_WEB_URL;
 }

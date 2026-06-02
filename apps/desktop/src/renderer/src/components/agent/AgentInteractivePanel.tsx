@@ -22,6 +22,7 @@ import { useAgentRunStore, AgentBlock, getDiffStats } from '../../stores/agentRu
 import { useActionStore } from '../../stores/actionStore';
 import { runAgent, AgentProgress } from '../../lib/agentRunner';
 import { buildRichContext } from '../../lib/projectContext';
+import { ensureWorkspace, WorkspaceCancelledError } from '../../lib/workspaceManager';
 import { useAgentStore } from '../../stores/agentStore';
 import { useAgentStateStore, type AgentMode, PHASE_LABELS } from '../../stores/agentStateStore';
 import { TaskProgressPanel } from './TaskProgressPanel';
