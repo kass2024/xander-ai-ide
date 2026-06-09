@@ -456,6 +456,33 @@ export const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_terminal_cwd',
+      description: 'Get the active terminal/project working directory.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_project_tree',
+      description: 'Get folder tree for a path (alias for list_files at root).',
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'Directory path (default: project root)' } },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'detect_stack',
+      description: 'Detect frameworks and package managers (PHP, React, Laravel, Node, etc.). Alias for analyze_project.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
 ];
 
 export function getAgentSystemPrompt(context?: {
@@ -496,11 +523,22 @@ GIT:
 - Always git_status before commit; summarize changes in commit message
 - git_push only when the user wants changes published
 
-RULES:
-- NEVER say "you should change X" without calling a tool
+RULES (CRITICAL — violations break the product):
+- NEVER respond with only advice, numbered steps, or "Would you like me to…" — USE TOOLS IMMEDIATELY
+- On action requests (convert, build, fix, create): FIRST tool call must be analyze_project or walk_project_files
+- NEVER ask permission to start — execute reads automatically; writes/commands get IDE approval
+- NEVER say "you should change X" without calling a tool in the same turn
 - Prefer edit_file patches over blind write_file on existing files
 - Path traversal outside project root is blocked
-- Brief status before major steps
+- Continue until task is done — do not stop after explaining
+
+PHP → REACT CONVERSION:
+1. walk_project_files + read_file all PHP views/includes
+2. create_folder/create_file for React scaffold (src/components, src/pages, src/routes)
+3. write_file each React component preserving UI from PHP
+4. run_terminal: npm create vite / npm install / npm run build
+5. Fix build errors in a loop until success
+6. write_file README with run instructions
 
 AGENT TASK MODES (user-selected in IDE):
 - chat: read-only Q&A

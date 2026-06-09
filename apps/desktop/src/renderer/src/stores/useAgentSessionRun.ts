@@ -48,6 +48,8 @@ export function useAgentSessionRun(sessionId: string | null | undefined) {
       toggleFilesList: () => store().toggleFilesList(sid),
       undoAll: (projectPath: string) => store().undoAll(sid, projectPath),
       getEditedFileCount: () => store().getEditedFileCount(sid),
+      addTaskPlan: (title: string, projectPath: string, actions: string[]) =>
+        store().addTaskPlan(sid, title, projectPath, actions),
       isSessionRunning: (id: string) => store().isSessionRunning(id),
     };
   }, [sid]);

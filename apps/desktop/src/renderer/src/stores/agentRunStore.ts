@@ -16,7 +16,8 @@ export type AgentBlockType =
   | 'screenshot_analysis'
   | 'tool_step'
   | 'approval'
-  | 'progress_summary';
+  | 'progress_summary'
+  | 'task_plan';
 
 export type ToolStepStatus = 'running' | 'success' | 'failed' | 'skipped' | 'awaiting_approval';
 
@@ -49,6 +50,9 @@ export interface AgentBlock {
   actionId?: string;
   approvalReason?: string;
   summaryItems?: string[];
+  taskTitle?: string;
+  taskActions?: string[];
+  taskStatus?: 'ready' | 'running' | 'done';
 }
 
 export interface AgentFileEdit {
@@ -128,6 +132,8 @@ interface AgentRunStore {
   addText: (sessionId: string, content: string) => void;
   addError: (sessionId: string, message: string) => void;
   addProgressSummary: (sessionId: string, items: string[]) => void;
+  addTaskPlan: (sessionId: string, title: string, projectPath: string, actions: string[]) => void;
+  setTaskPlanStatus: (sessionId: string, blockId: string, status: 'ready' | 'running' | 'done') => void;
   startToolStep: (sessionId: string, toolName: string, label: string, detail?: string) => string;
   finishToolStep: (sessionId: string, stepId: string, status: ToolStepStatus, detail?: string) => void;
   addApprovalBlock: (
@@ -446,6 +452,37 @@ export const useAgentRunStore = create<AgentRunStore>()(
         }));
       },
 
+      addTaskPlan: (sessionId, title, projectPath, actions) => {
+        set((s) => ({
+          runs: patchRun(s.runs, sessionId, (r) => ({
+            ...r,
+            blocks: [
+              ...r.blocks.filter((b) => b.type !== 'task_plan'),
+              {
+                id: nextId('task'),
+                type: 'task_plan' as const,
+                timestamp: Date.now(),
+                taskTitle: title,
+                path: projectPath,
+                taskActions: actions,
+                taskStatus: 'running' as const,
+              },
+            ],
+          })),
+        }));
+      },
+
+      setTaskPlanStatus: (sessionId, blockId, status) => {
+        set((s) => ({
+          runs: patchRun(s.runs, sessionId, (r) => ({
+            ...r,
+            blocks: r.blocks.map((b) =>
+              b.id === blockId && b.type === 'task_plan' ? { ...b, taskStatus: status } : b,
+            ),
+          })),
+        }));
+      },
+
       startToolStep: (sessionId, toolName, label, detail) => {
         get().flushExplored(sessionId);
         get().clearStatus(sessionId);
@@ -600,5 +637,7 @@ export function getRunStoreForSession(sessionId: string) {
       s.finishToolStep(sid, stepId, status, detail),
     addApprovalBlock: (opts: Parameters<typeof s.addApprovalBlock>[1]) => s.addApprovalBlock(sid, opts),
     removeApprovalBlock: (blockId: string) => s.removeApprovalBlock(sid, blockId),
+    addTaskPlan: (title: string, projectPath: string, actions: string[]) =>
+      s.addTaskPlan(sid, title, projectPath, actions),
   };
 }

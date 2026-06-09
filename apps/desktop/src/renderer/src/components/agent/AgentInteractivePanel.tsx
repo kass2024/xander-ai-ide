@@ -34,6 +34,8 @@ import {
   AGENT_MODE_CONFIG,
 } from '../../stores/agentStateStore';
 import { AgentPlanChecklist } from './AgentPlanChecklist';
+import { AgentTaskCard } from './AgentTaskCard';
+import { isActionPrompt } from '../../lib/agentIntent';
 import { useAgentPlanStore } from '../../stores/agentPlanStore';
 import { TaskProgressPanel } from './TaskProgressPanel';
 import apiClient from '../../lib/api';
@@ -244,6 +246,15 @@ function RenderBlock({
       );
     case 'progress_summary':
       return <AgentProgressSummary items={block.summaryItems || []} />;
+    case 'task_plan':
+      return (
+        <AgentTaskCard
+          title={block.taskTitle || 'Task'}
+          projectPath={block.path || projectPath || ''}
+          actions={block.taskActions || []}
+          status={block.taskStatus || 'running'}
+        />
+      );
     default:
       return null;
   }
@@ -494,6 +505,9 @@ function AgentInteractivePanel({
       }
 
       const prompt = promptText;
+      if (isActionPrompt(prompt) && (agentMode === 'chat' || agentMode === 'command')) {
+        setAgentMode('build');
+      }
       const imagePayload = attachmentsForApi(encodedAttachments);
       const imagePreviews = encodedAttachments.map((a) => a.previewUrl);
 

@@ -17,7 +17,16 @@ import {
 } from '../../../shared/agentModes';
 import { maskSecrets } from './secretMasking';
 import { useAgentPlanStore } from '../stores/agentPlanStore';
+import {
+  isActionPrompt,
+  extractPathFromPrompt,
+  buildLocalTaskPlan,
+  isFakeChatbotResponse,
+  isPhpToReactTask,
+} from './agentIntent';
+import { bootstrapAgentContext } from './agentBootstrap';
 import { ensureWorkspace, WorkspaceCancelledError } from './workspaceManager';
+import { useProjectStore } from '../stores/projectStore';
 import { useAuthStore } from '../stores/authStore';
 import { getRunStoreForSession } from '../stores/agentRunStore';
 import { useAgentPreferencesStore } from '../stores/agentPreferencesStore';
@@ -285,9 +294,19 @@ export async function runAgent(options: {
   } = options;
   let context = options.context;
 
-  const agentMode = options.agentMode ?? useAgentStateStore.getState().mode;
-  const model = resolveModelForMode(options.model, agentMode, prompt, !!images?.length);
+  let agentMode = options.agentMode ?? useAgentStateStore.getState().mode;
+  const actionTask = isActionPrompt(prompt);
+  if (actionTask && (agentMode === 'chat' || agentMode === 'command')) {
+    agentMode = 'build';
+    useAgentStateStore.getState().setMode('build');
+  }
+  let model = resolveModelForMode(options.model, agentMode, prompt, !!images?.length);
+  if (actionTask && (!model || model === 'gemini-2.5-flash')) {
+    model = 'gpt-4o';
+  }
   const MAX_STEPS = maxStepsForMode(agentMode);
+  let forceTools = actionTask;
+  let chatbotRetries = 0;
 
   const hasToken = !!apiClient.getToken();
   const mockMode = !hasToken;
@@ -312,6 +331,18 @@ export async function runAgent(options: {
   let cancelled = false;
 
   let repositoryPath = context.repositoryPath;
+  const pathFromPrompt = extractPathFromPrompt(prompt);
+  if (pathFromPrompt && !repositoryPath) {
+    onProgress?.({ type: 'activity', message: `Detected path: ${pathFromPrompt}` });
+    try {
+      const opened = await window.electronAPI.openProject(pathFromPrompt);
+      if (opened.success) {
+        repositoryPath = pathFromPrompt;
+        useProjectStore.getState().setCurrentProject(pathFromPrompt);
+        context = { ...context, repositoryPath, workspaceFolders: [pathFromPrompt] };
+      }
+    } catch { /* fall through to picker */ }
+  }
   if (!repositoryPath) {
     onProgress?.({ type: 'activity', message: 'Selecting project folder...' });
     try {
@@ -344,13 +375,23 @@ export async function runAgent(options: {
   let activeProvider: string | undefined;
   let screenshotAnalysisFromScan: string | undefined;
 
-  // Use cached project summary — avoid re-scanning on every message
+  // Bootstrap: real scan before LLM on action tasks
   let projectSummary = context.projectSummary || peekProjectSummary(repositoryPath || '');
-  if (!projectSummary && repositoryPath) {
+  if (actionTask && repositoryPath) {
+    const boot = await bootstrapAgentContext(repositoryPath, prompt, onProgress);
+    projectSummary = boot.projectSummary;
+    context = { ...context, projectSummary, projectTree: boot.projectTree };
+    const planSteps = buildLocalTaskPlan(prompt, repositoryPath);
+    useAgentPlanStore.getState().setSteps(planSteps);
+    runStore.addTaskPlan(
+      isPhpToReactTask(prompt) ? 'Convert PHP project to React' : 'Execute coding task',
+      repositoryPath,
+      planSteps,
+    );
+    forceTools = true;
+  } else if (!projectSummary && repositoryPath) {
     projectSummary = await getCachedProjectSummary(repositoryPath);
-    if (projectSummary) {
-      context = { ...context, projectSummary };
-    }
+    if (projectSummary) context = { ...context, projectSummary };
   }
 
   if (images?.length) {
@@ -403,6 +444,8 @@ export async function runAgent(options: {
         ...context,
         projectSummary,
         agentMode,
+        forceTools: forceTools && toolCallsMade.length === 0,
+        terminalCwd: repositoryPath,
         ...(images?.length && stepsUsed === 1 ? { images } : {}),
         ...(screenshotAnalysisFromScan && stepsUsed === 1
           ? { screenshotAnalysis: screenshotAnalysisFromScan }
@@ -419,7 +462,25 @@ export async function runAgent(options: {
     }
 
     if (step.finishReason === 'stop') {
-      finalContent = step.message.content || 'Task completed.';
+      const reply = step.message.content || '';
+      const needsTools = actionTask && toolCallsMade.length === 0;
+      const isFake = isFakeChatbotResponse(reply) || (needsTools && reply.length > 80);
+      if (isFake && chatbotRetries < 4) {
+        chatbotRetries += 1;
+        forceTools = true;
+        messages.push({ role: 'assistant', content: reply });
+        messages.push({
+          role: 'user',
+          content:
+            '[SYSTEM] Execute with tools NOW. Do not explain or ask questions. '
+            + 'Call walk_project_files or read_file, then write_file/create_file. '
+            + 'For PHP→React: scaffold Vite React, convert pages to components, run npm install && npm run build.',
+        });
+        onProgress?.({ type: 'activity', message: 'Rejecting chat-only reply — forcing tool execution…' });
+        stateStore.setPhase('reading_files');
+        continue;
+      }
+      finalContent = reply || 'Task completed.';
       if (normalizeAgentMode(agentMode) === 'plan' && finalContent) {
         useAgentPlanStore.getState().parseFromMarkdown(finalContent);
       }
@@ -448,6 +509,7 @@ export async function runAgent(options: {
         const args = parseToolArgs(tc.function.arguments);
         const filePath = (args.path || args.file || args.old_path) as string | undefined;
         toolCallsMade.push(toolName);
+        forceTools = false;
 
         const phase = phaseFromTool(toolName);
         stateStore.setPhase(phase);

@@ -187,7 +187,8 @@ export async function executeToolCall(
         };
       }
 
-      case 'analyze_project': {
+      case 'analyze_project':
+      case 'detect_stack': {
         if (!projectPath) {
           return { tool_call_id: toolCall.id, content: 'No project open', success: false };
         }
@@ -197,6 +198,28 @@ export async function executeToolCall(
           content: truncate(formatAnalysisForAgent(analysis)),
           success: true,
         };
+      }
+
+      case 'get_terminal_cwd': {
+        const ws = await api.getWorkspacePath();
+        const cwd = projectPath || ws.path || '';
+        return {
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ cwd, workspaceOpen: !!cwd }),
+          success: !!cwd,
+        };
+      }
+
+      case 'get_project_tree': {
+        const dir = resolvePath(projectPath, String(args.path || '.'));
+        const result = await api.listFiles(dir);
+        if (!result.success) {
+          return { tool_call_id: toolCall.id, content: `Error: ${result.error}`, success: false };
+        }
+        const tree = (result.files || [])
+          .map((f) => (f.isDirectory ? `[dir] ${f.name}` : f.name))
+          .join('\n');
+        return { tool_call_id: toolCall.id, content: truncate(`Tree: ${dir}\n${tree}`), success: true };
       }
 
       case 'run_terminal':

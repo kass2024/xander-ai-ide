@@ -175,6 +175,7 @@ export class MultiModelService implements OnModuleInit {
     tools = AGENT_TOOLS,
     images?: Array<{ mediaType: string; data: string }>,
     agentMode?: string,
+    forceTools?: boolean,
   ): Promise<LLMCompletionResult> {
     const prompt = extractLastUserText(messages);
     const { provider, model } = this.routeModel(requested, 'agent', agentMode, prompt);
@@ -184,13 +185,14 @@ export class MultiModelService implements OnModuleInit {
     for (const { prov, mod } of fallbacks) {
       try {
         if (prov === 'anthropic' && this.anthropicKey) {
-          return await this.callAnthropicAgent(mod, systemPrompt, messages, tools, images);
+          return await this.callAnthropicAgent(mod, systemPrompt, messages, tools, images, forceTools);
         }
         if (prov === 'openai' && this.openai) {
-          return await this.callOpenAIAgent(mod, systemPrompt, messages, tools, images);
+          return await this.callOpenAIAgent(mod, systemPrompt, messages, tools, images, forceTools);
         }
         if (prov === 'google' && this.geminiKey) {
-          return await this.callGeminiAgent(mod, systemPrompt, messages);
+          // Gemini agent path has no native tool calling — skip to OpenAI/Anthropic
+          continue;
         }
       } catch (err) {
         lastError = err;
@@ -287,6 +289,7 @@ export class MultiModelService implements OnModuleInit {
     messages: Array<{ role: string; content?: string | null; tool_call_id?: string; tool_calls?: LLMCompletionResult['toolCalls'] }>,
     tools: OpenAI.Chat.Completions.ChatCompletionTool[],
     images?: Array<{ mediaType: string; data: string }>,
+    forceTools?: boolean,
   ): Promise<LLMCompletionResult> {
     const anthropicMessages: Array<Record<string, unknown>> = [];
     let imagesInjected = false;
@@ -338,6 +341,7 @@ export class MultiModelService implements OnModuleInit {
         max_tokens: 16000,
         system: systemPrompt,
         tools: this.anthropicTools(tools),
+        tool_choice: forceTools ? { type: 'any' } : { type: 'auto' },
         messages: anthropicMessages,
       }),
     });
@@ -383,6 +387,7 @@ export class MultiModelService implements OnModuleInit {
     messages: Array<{ role: string; content?: string | null; tool_call_id?: string; tool_calls?: LLMCompletionResult['toolCalls'] }>,
     tools: OpenAI.Chat.Completions.ChatCompletionTool[],
     images?: Array<{ mediaType: string; data: string }>,
+    forceTools?: boolean,
   ): Promise<LLMCompletionResult> {
     let imagesInjected = false;
     const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -423,7 +428,7 @@ export class MultiModelService implements OnModuleInit {
       model,
       messages: openaiMessages,
       tools,
-      tool_choice: 'auto',
+      tool_choice: forceTools ? 'required' : 'auto',
       max_tokens: 16000,
       temperature: 0.2,
     });

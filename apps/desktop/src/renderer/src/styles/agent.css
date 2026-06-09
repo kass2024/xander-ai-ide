@@ -1388,3 +1388,117 @@
 .agent-plan-step:hover {
   color: #eee;
 }
+
+.agent-task-card {
+  display: flex;
+  margin: 0.65rem 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, #141414 60%);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.08);
+}
+
+.agent-task-card-accent {
+  width: 4px;
+  background: linear-gradient(180deg, #22d3ee, #3b82f6);
+  flex-shrink: 0;
+}
+
+.agent-task-card-body {
+  flex: 1;
+  padding: 0.75rem 0.85rem;
+}
+
+.agent-task-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.agent-task-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e8e8e8;
+}
+
+.agent-task-card-status {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.15);
+  color: #67e8f9;
+}
+
+.agent-task-card-status--running {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+}
+
+.agent-task-card-status--done {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.agent-task-card-path {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family, Consolas, monospace);
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+
+.agent-task-card-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-task-card-actions li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 11px;
+  color: #aaa;
+  padding: 0.2rem 0;
+}
+
+.agent-task-card-step-num {
+  font-size: 9px;
+  font-weight: 700;
+  color: #22d3ee;
+  min-width: 1rem;
+}
+
+.agent-task-card-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.agent-task-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.agent-task-btn--run {
+  background: linear-gradient(135deg, #0891b2, #2563eb);
+  color: #fff;
+}
+
+.agent-task-btn--cancel {
+  background: #2a2a2a;
+  color: #888;
+}

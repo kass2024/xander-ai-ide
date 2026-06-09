@@ -370,6 +370,7 @@ export class AiService {
     }
 
     try {
+      const forceTools = request.context?.forceTools === true;
       const result = await this.multiModel.agentStepWithTools(
         request.model,
         systemPrompt,
@@ -377,6 +378,7 @@ export class AiService {
         AGENT_TOOLS,
         images,
         agentMode,
+        forceTools,
       );
 
       const usedModel = result.model;
