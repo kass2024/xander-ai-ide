@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { normalizeOpenAIKey, resolveOpenAIModel, getModelFallbacks, resolveGeminiModel, getGeminiFallbacks } from './model.utils';
 import { AGENT_TOOLS } from './agent.tools';
 import { isUiRelatedTask, extractLastUserText } from './ui-routing.utils';
+import { routeProviderForMode, normalizeAgentMode } from './agent-modes';
 
 export type TaskType =
   | 'autocomplete'
@@ -118,29 +119,22 @@ export class MultiModelService implements OnModuleInit {
       return { provider: 'openai', model: resolveOpenAIModel(requested, 'agent', defaults) };
     }
 
-    // AutoRouter by agent mode (desktop: standard | fast | deep | refactor)
+    // AutoRouter by agent task mode (chat | plan | build | debug | refactor | database | command)
     if (task === 'agent' && agentMode) {
-      switch (agentMode) {
-        case 'fast':
-          if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
-          if (this.openai) return { provider: 'openai', model: defaults.fast };
-          if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          break;
-        case 'deep':
-        case 'refactor':
-          if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          if (this.openai) return { provider: 'openai', model: defaults.agent };
-          if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
-          break;
-        case 'standard':
-        default:
-          if (uiTask && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
-          if (this.openai) return { provider: 'openai', model: defaults.agent };
-          if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
-          break;
+      const mode = normalizeAgentMode(agentMode);
+      const routed = routeProviderForMode(mode, uiTask, {
+        openai: !!this.openai,
+        anthropic: !!this.anthropicKey,
+        gemini: !!this.geminiKey,
+      });
+      if (routed === 'anthropic' && this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+      if (routed === 'google' && this.geminiKey) return { provider: 'google', model: defaults.gemini };
+      if (routed === 'openai' && this.openai) {
+        return { provider: 'openai', model: mode === 'chat' || mode === 'command' ? defaults.fast : defaults.agent };
       }
+      if (this.anthropicKey) return { provider: 'anthropic', model: defaults.claude };
+      if (this.openai) return { provider: 'openai', model: defaults.agent };
+      if (this.geminiKey) return { provider: 'google', model: defaults.gemini };
     }
 
     switch (task) {

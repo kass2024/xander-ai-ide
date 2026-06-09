@@ -1,8 +1,7 @@
 import React from 'react';
 import { Bot, Archive, Trash2, Clock, Loader2 } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
-import { useAgentStateStore } from '../../stores/agentStateStore';
-import { useActionStore } from '../../stores/actionStore';
+import { useAgentRunStore } from '../../stores/agentRunStore';
 
 interface AgentSessionListProps {
   sessions: ReturnType<typeof useAgentStore.getState>['sessions'];
@@ -13,13 +12,9 @@ interface AgentSessionListProps {
   onDelete: (id: string) => void;
 }
 
-function statusBadge(sessionId: string | null, activeSessionId: string | null): string | null {
-  const phase = useAgentStateStore.getState().phase;
-  const pending = useActionStore.getState().actions.some((a) => a.status === 'pending');
+function statusBadge(sessionId: string, activeSessionId: string | null, isRunning: boolean): string | null {
+  if (isRunning) return 'Running…';
   if (sessionId !== activeSessionId) return null;
-  if (pending) return 'Awaiting approval';
-  if (phase === 'awaiting_confirmation') return 'Awaiting approval to run command';
-  if (phase === 'running_tools' || phase === 'planning') return 'Running…';
   return null;
 }
 
@@ -31,6 +26,7 @@ export function AgentSessionList({
   onArchive,
   onDelete,
 }: AgentSessionListProps) {
+  const isSessionRunning = useAgentRunStore((s) => s.isSessionRunning);
   const filtered = sessions.filter(
     (s) => !query || s.title.toLowerCase().includes(query.toLowerCase()),
   );
@@ -67,7 +63,7 @@ export function AgentSessionList({
         <div key={group.label} className="mb-3">
           <div className="text-[10px] uppercase tracking-wide opacity-45 px-3 mb-1">{group.label}</div>
           {group.items.map((session) => {
-            const badge = statusBadge(session.id, activeSessionId);
+            const badge = statusBadge(session.id, activeSessionId, isSessionRunning(session.id));
             return (
               <div
                 key={session.id}

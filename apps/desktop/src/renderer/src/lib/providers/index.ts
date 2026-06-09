@@ -1,6 +1,7 @@
 import type { AIProvider, AgentEvent, AIProviderName } from '../../../shared/types';
 import apiClient from '../api';
 import { isUiRelatedTask, CLAUDE_UI_MODEL } from '../uiRouting';
+import { AGENT_MODE_CONFIG, normalizeAgentMode } from '../../../../shared/agentModes';
 
 export type { AIProvider, AgentEvent, AIProviderName };
 
@@ -27,7 +28,8 @@ export interface StreamChatOptions {
 export function resolveAutoProvider(prompt: string, agentMode?: string): AIProviderName {
   const lower = prompt.toLowerCase();
   if (isUiRelatedTask(prompt)) return 'claude';
-  if (agentMode === 'refactor' || agentMode === 'deep' || /\brefactor|architecture|review entire\b/.test(lower)) {
+  const mode = normalizeAgentMode(agentMode);
+  if (mode === 'refactor' || mode === 'plan' || mode === 'database' || /\brefactor|architecture|review entire\b/.test(lower)) {
     return 'claude';
   }
   if (/\banalyze|ocr|screenshot|long document\b/.test(lower)) {
@@ -38,8 +40,10 @@ export function resolveAutoProvider(prompt: string, agentMode?: string): AIProvi
 
 export function resolveAutoModel(prompt: string, agentMode?: string): string | undefined {
   if (isUiRelatedTask(prompt)) return CLAUDE_UI_MODEL;
-  if (agentMode === 'refactor' || agentMode === 'deep') return CLAUDE_UI_MODEL;
-  if (agentMode === 'fast') return 'gemini-2.5-flash';
+  const mode = normalizeAgentMode(agentMode);
+  if (mode === 'refactor' || mode === 'plan' || mode === 'database') return CLAUDE_UI_MODEL;
+  if (mode === 'chat' || mode === 'command') return 'gpt-4o-mini';
+  if (AGENT_MODE_CONFIG[mode].preferredProvider === 'google') return 'gemini-2.5-flash';
   return undefined;
 }
 

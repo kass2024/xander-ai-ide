@@ -99,7 +99,11 @@ export const APPROVAL_REQUIRED_TOOLS = new Set([
   'lint_project',
   'mysql_execute',
   'db_migration_preview',
+  'generate_migration',
+  'create_database_schema',
+  'alter_database_schema',
   'rename_file',
+  'create_folder',
 ]);
 
 /** Safe read-only tools */

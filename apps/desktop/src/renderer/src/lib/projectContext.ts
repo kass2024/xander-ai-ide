@@ -1,6 +1,7 @@
 import { getSemanticContextForQuery } from './codebaseSearch';
-import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
+import { getCachedProjectSummary, peekProjectSummary, getCachedTree, setCachedTree } from './projectAnalysisCache';
 import { useCodebaseIndexStore } from '../stores/codebaseIndexStore';
+import { maskSecrets } from './secretMasking';
 
 const CODE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.php', '.cs',
@@ -24,6 +25,7 @@ export interface WorkspaceContext {
   projectSummary?: string;
   directoryListing?: string;
   semanticContext?: string;
+  mentionedFiles?: string;
   agentMode?: string;
 }
 
@@ -97,12 +99,15 @@ export async function buildRichContext(options: {
   let projectTree: string | undefined;
   let projectSummary: string | undefined;
   if (projectPath) {
-    projectTree = await buildProjectTree(projectPath);
-    try {
-      const analysis = await analyzeProject(projectPath);
-      projectSummary = formatAnalysisForAgent(analysis);
-    } catch {
-      /* optional project analysis */
+    projectTree = getCachedTree(projectPath);
+    if (!projectTree) {
+      projectTree = await buildProjectTree(projectPath);
+      if (projectTree) setCachedTree(projectPath, projectTree);
+    }
+    projectSummary = peekProjectSummary(projectPath);
+    const needsDeepAnalysis = /database|mysql|schema|migration|sql|db\b|analyse|analyze/i.test(prompt || '');
+    if (!projectSummary && needsDeepAnalysis) {
+      projectSummary = await getCachedProjectSummary(projectPath);
     }
   }
 
@@ -119,9 +124,25 @@ export async function buildRichContext(options: {
     }
   }
 
+  let mentionedFiles: string | undefined;
+  if (prompt && projectPath && api?.readFile) {
+    const mentions = [...prompt.matchAll(/@([^\s@]+)/g)].map((m) => m[1]).slice(0, 5);
+    if (mentions.length) {
+      const chunks: string[] = [];
+      for (const ref of mentions) {
+        const full = resolvePath(projectPath, ref);
+        const read = await api.readFile(full);
+        if (read.success && read.content) {
+          chunks.push(`@${ref}:\n${maskSecrets(read.content.slice(0, 8000))}`);
+        }
+      }
+      if (chunks.length) mentionedFiles = chunks.join('\n\n');
+    }
+  }
+
   return {
     currentFile: currentFilePath,
-    currentFileContent,
+    currentFileContent: currentFileContent ? maskSecrets(currentFileContent) : undefined,
     selectedText: selectedCode,
     repositoryPath: projectPath,
     workspaceFolders: workspaceFolders.length ? workspaceFolders : projectPath ? [projectPath] : [],
@@ -132,6 +153,7 @@ export async function buildRichContext(options: {
     semanticContext: prompt && projectPath && useCodebaseIndexStore.getState().status === 'ready'
       ? await getSemanticContextForQuery(prompt, 6)
       : undefined,
+    mentionedFiles,
   };
 }
 

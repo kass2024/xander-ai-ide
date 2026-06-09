@@ -51,9 +51,17 @@ export function AgentPage({
     setActiveSession(id);
   };
 
+  useEffect(() => {
+    const state = useAgentStore.getState();
+    if (!state.activeSessionId && state.sessions.filter((s) => !s.archived).length === 0) {
+      handleNewAgent();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="agent-page h-full flex min-h-0 bg-[#121212]">
-      <div className="w-64 shrink-0">
+      <div className="agent-sidebar-wrap shrink-0">
         <AgentSidebar
           projectPath={projectPath}
           activeSessionId={activeSessionId}

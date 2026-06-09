@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { getModeSystemPrompt, normalizeAgentMode } from './agent-modes';
 
 /** Tool schemas sent to LLM — executed on the desktop client via Electron IPC. */
 export const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -501,17 +502,23 @@ RULES:
 - Path traversal outside project root is blocked
 - Brief status before major steps
 
-MODES (API auto-routing):
-- standard: OpenAI — balanced tool use; UI/frontend/CSS tasks auto-route to Claude
-- fast: Gemini/OpenAI mini — quick fixes; UI tasks auto-route to Claude
-- deep: Claude — thorough multi-file analysis
-- refactor: Claude — multi-file edits via refactor_files then edit_file each
-- Builder/Composer: Claude — polished UI and multi-file generation
-- Screenshots: Claude vision — error and layout analysis`;
+AGENT TASK MODES (user-selected in IDE):
+- chat: read-only Q&A
+- plan: analyze and output checklist plan — no edits
+- build: full autonomous coding (default)
+- debug: fix errors from terminal/logs
+- refactor: safe multi-file improvements
+- database: migrations, schema, SQL
+- command: terminal commands with approval
 
-  if (context?.agentMode) {
-    prompt += `\n\nActive mode: ${context.agentMode}`;
-  }
+SAFETY:
+- Never print API keys, DB passwords, JWT secrets, or Stripe keys
+- Mask secrets from .env in all responses
+- Destructive commands and deletes require user approval in the IDE`;
+
+  const mode = normalizeAgentMode(context?.agentMode);
+  prompt += `\n\n${getModeSystemPrompt(mode)}`;
+  prompt += `\n\nActive mode: ${mode}`;
 
   if (context?.hasScreenshots) {
     prompt += `
@@ -530,6 +537,9 @@ SCREENSHOT: quote exact errors, map to files, fix with tools, verify in terminal
   if (context?.currentFileContent) prompt += `\n\nOpen file content:\n${context.currentFileContent}`;
   if (context?.selectedText) prompt += `\n\nSelection:\n${context.selectedText}`;
   if (context?.semanticContext) prompt += `\n\nRelevant code:\n${context.semanticContext}`;
+  if ((context as { mentionedFiles?: string })?.mentionedFiles) {
+    prompt += `\n\n@mentioned files:\n${(context as { mentionedFiles?: string }).mentionedFiles}`;
+  }
 
   return prompt;
 }

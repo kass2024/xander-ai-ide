@@ -83,7 +83,7 @@ export function ApprovalCard({ block, projectPath, sessionId, onResolved }: Appr
 
     if (approved) approve(action.id);
     else reject(action.id);
-    removeApprovalBlock(block.id);
+    removeApprovalBlock(sessionId || '_default', block.id);
     onResolved?.();
   };
 

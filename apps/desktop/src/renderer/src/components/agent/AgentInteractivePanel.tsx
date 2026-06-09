@@ -18,13 +18,23 @@ import {
   Square,
 } from 'lucide-react';
 import { displayModelLabel, type ModelOption } from '../../lib/modelLabels';
-import { useAgentRunStore, AgentBlock, getDiffStats } from '../../stores/agentRunStore';
+import { AgentBlock, getDiffStats } from '../../stores/agentRunStore';
+import { useAgentSessionRun } from '../../stores/useAgentSessionRun';
 import { useActionStore } from '../../stores/actionStore';
 import { runAgent, AgentProgress } from '../../lib/agentRunner';
 import { buildRichContext } from '../../lib/projectContext';
 import { ensureWorkspace, WorkspaceCancelledError } from '../../lib/workspaceManager';
 import { useAgentStore } from '../../stores/agentStore';
-import { useAgentStateStore, type AgentMode, PHASE_LABELS } from '../../stores/agentStateStore';
+import {
+  useAgentStateStore,
+  type AgentMode,
+  type AgentPhase,
+  PHASE_LABELS,
+  AGENT_MODE_LIST,
+  AGENT_MODE_CONFIG,
+} from '../../stores/agentStateStore';
+import { AgentPlanChecklist } from './AgentPlanChecklist';
+import { useAgentPlanStore } from '../../stores/agentPlanStore';
 import { TaskProgressPanel } from './TaskProgressPanel';
 import apiClient from '../../lib/api';
 import {
@@ -42,6 +52,10 @@ import { ApprovalCard } from './ApprovalCard';
 import { DiffViewer } from './DiffViewer';
 import { TerminalOutput } from './TerminalOutput';
 import { ToolCallCard } from './ToolCallCard';
+import { AgentProgressSummary } from './AgentProgressSummary';
+import { AgentSessionTabs } from './AgentSessionTabs';
+import { AgentEnterpriseStatus } from './AgentEnterpriseStatus';
+import { AgentActivityLine } from './AgentActivityLine';
 
 interface AgentInteractivePanelProps {
   projectPath: string | null;
@@ -132,6 +146,21 @@ function ExploredBlock({ block }: { block: AgentBlock }) {
   );
 }
 
+function StatusBlock({ block }: { block: AgentBlock }) {
+  const phase = useAgentStateStore((s) => s.phase);
+  const provider = useAgentStateStore((s) => s.provider);
+  const model = useAgentStateStore((s) => s.model);
+  return (
+    <AgentEnterpriseStatus
+      phase={phase}
+      provider={provider}
+      model={model}
+      loading={block.loading}
+      message={block.message}
+    />
+  );
+}
+
 function RenderBlock({
   block,
   onToggleDiff,
@@ -164,14 +193,15 @@ function RenderBlock({
     case 'approval':
       return <ApprovalCard block={block} projectPath={projectPath} sessionId={sessionId} />;
     case 'activity':
-      return null;
-    case 'status':
       return (
-        <div className="agent-status-line">
-          {block.loading && <Loader2 className="w-3.5 h-3.5 animate-spin opacity-60" />}
-          <span>{block.message}</span>
-        </div>
+        <AgentActivityLine
+          message={block.message || ''}
+          toolName={block.toolName}
+          category={block.category}
+        />
       );
+    case 'status':
+      return <StatusBlock block={block} />;
     case 'explored':
       return <ExploredBlock block={block} />;
     case 'screenshot_analysis':
@@ -212,6 +242,8 @@ function RenderBlock({
       return (
         <div className="agent-error-block">{block.content}</div>
       );
+    case 'progress_summary':
+      return <AgentProgressSummary items={block.summaryItems || []} />;
     default:
       return null;
   }
@@ -239,6 +271,7 @@ function AgentInteractivePanel({
 }: AgentInteractivePanelProps, ref) {
   const { sessions, addMessage, updateSession, createSession, setActiveSession } = useAgentStore();
   const ensureSession = useAuthStore((s) => s.ensureSession);
+  const run = useAgentSessionRun(agentSessionId);
   const {
     blocks,
     isRunning,
@@ -261,7 +294,7 @@ function AgentInteractivePanel({
     undoAll,
     getEditedFileCount,
     resetRun,
-  } = useAgentRunStore();
+  } = run;
 
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
@@ -273,6 +306,11 @@ function AgentInteractivePanel({
   const agentMode = useAgentStateStore((s) => s.mode);
   const setAgentMode = useAgentStateStore((s) => s.setMode);
   const phase = useAgentStateStore((s) => s.phase);
+  const provider = useAgentStateStore((s) => s.provider);
+  const model = useAgentStateStore((s) => s.model);
+  const setPhase = useAgentStateStore((s) => s.setPhase);
+  const setProvider = useAgentStateStore((s) => s.setProvider);
+  const resetAgentState = useAgentStateStore((s) => s.reset);
   const requestCancel = useAgentStateStore((s) => s.requestCancel);
   const feedRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -365,10 +403,12 @@ function AgentInteractivePanel({
   }, [addAttachment]);
 
   const handleProgress = useCallback((p: AgentProgress) => {
-    if (p.type === 'activity') {
-      /* Steps shown via tool_step blocks */
+    if (p.type === 'phase' && p.phase) {
+      setPhase(p.phase as AgentPhase);
+    } else if (p.type === 'activity' && p.message) {
+      addActivity(p.message, p.toolName ? { toolName: p.toolName } : undefined);
     } else if (p.type === 'thinking') {
-      setStatus(p.message || 'Analyzing...', true);
+      setStatus(p.message || PHASE_LABELS.analyzing, true);
     } else if (p.type === 'screenshot_analysis' && p.content) {
       addScreenshotAnalysis(p.content);
     } else if (p.type === 'tool_start') {
@@ -380,7 +420,8 @@ function AgentInteractivePanel({
       ) {
         flushExplored();
       }
-      setStatus(p.message || 'Working...', true);
+      if (p.provider) setProvider(p.provider, p.model || null);
+      setStatus(p.message || PHASE_LABELS.planning, true);
     } else if (p.type === 'search') {
       addSearch();
     } else if (p.type === 'explored' && p.path) {
@@ -400,7 +441,7 @@ function AgentInteractivePanel({
       setStatus(p.message || 'Waiting for your approval…', true);
     }
   }, [
-    setStatus, addScreenshotAnalysis, addExplored, addSearch,
+    setPhase, setProvider, setStatus, addActivity, addScreenshotAnalysis, addExplored, addSearch,
     addFileDiff, addTerminal, addText, addError, flushExplored,
     onFileChanged, onRunTerminal,
   ]);
@@ -465,6 +506,9 @@ function AgentInteractivePanel({
       }
 
       useActionStore.getState().clear();
+      resetAgentState();
+      useAgentPlanStore.getState().clearPlan();
+      setPhase('planning');
       startRun(prompt, imagePreviews.length ? imagePreviews : undefined);
       didStartRun = true;
       if (agentSessionId) addMessage(agentSessionId, { role: 'user', content: prompt });
@@ -482,6 +526,7 @@ function AgentInteractivePanel({
 
       const result = await runAgent({
         prompt,
+        sessionId: agentSessionId || run.sessionId,
         context: { ...context, agentMode },
         model: selectedModel === 'auto' ? undefined : selectedModel,
         agentMode,
@@ -506,7 +551,10 @@ function AgentInteractivePanel({
     } finally {
       sendInFlightRef.current = false;
       setIsSending(false);
-      if (didStartRun) endRun();
+      if (didStartRun) {
+        endRun();
+        setPhase('idle');
+      }
       onRefreshGit?.();
       onRefreshExplorer?.();
     }
@@ -529,6 +577,21 @@ function AgentInteractivePanel({
 
   return (
     <div className="agent-panel flex flex-col flex-1 min-h-0">
+      <AgentSessionTabs
+        activeSessionId={agentSessionId}
+        onSelect={setActiveSession}
+        onNewAgent={() => {
+          const id = createSession('New Agent', 'agent', projectPath || undefined);
+          setActiveSession(id);
+        }}
+        onClose={(id) => {
+          if (agentSessionId === id) {
+            const remaining = sessions.filter((s) => s.id !== id && !s.archived);
+            setActiveSession(remaining[0]?.id ?? null);
+          }
+          useAgentStore.getState().deleteSession(id);
+        }}
+      />
       {/* Cursor-style session bar */}
       <div className="cursor-session-bar">
         <div className="cursor-session-tab">
@@ -569,9 +632,29 @@ function AgentInteractivePanel({
                 <h4 className="text-[13px] font-medium mb-1 text-[#ccc]">Agent</h4>
               </>
             )}
-            <p className="text-[11px] opacity-45 max-w-[280px] text-center leading-relaxed">
-              Ask me to build, fix, or refactor code. Attach screenshots with Ctrl+V.
+            <p className="text-[11px] opacity-45 max-w-[320px] text-center leading-relaxed">
+              Plan, build, and refactor with full terminal, database, and file access. Attach screenshots with Ctrl+V.
             </p>
+            <div className="agent-quick-chips">
+              {[
+                'Improve UI styling',
+                'Run npm build',
+                'Inspect MySQL schema',
+                'Fix errors in project',
+              ].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="agent-quick-chip"
+                  onClick={() => {
+                    setInput(chip);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -586,12 +669,17 @@ function AgentInteractivePanel({
         ))}
 
         {blocks.length > 0 && isRunning && (
-          <div className="agent-status-line">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" />
-            <span className="text-violet-300">{PHASE_LABELS[phase]}</span>
-          </div>
+          <AgentEnterpriseStatus
+            phase={phase}
+            provider={provider}
+            model={model}
+            loading
+            message={PHASE_LABELS[phase]}
+          />
         )}
       </div>
+
+      <AgentPlanChecklist />
 
       <TaskProgressPanel projectPath={projectPath} compact={compact} />
 
@@ -705,19 +793,20 @@ function AgentInteractivePanel({
                   className="cursor-pill cursor-pill-auto capitalize"
                   onClick={() => setShowModeMenu(!showModeMenu)}
                 >
-                  {agentMode}
+                  {AGENT_MODE_CONFIG[agentMode]?.label || agentMode}
                   <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
                 {showModeMenu && (
-                  <div className="cursor-model-menu">
-                    {(['standard', 'fast', 'deep', 'refactor'] as AgentMode[]).map((m) => (
+                  <div className="cursor-model-menu agent-mode-menu">
+                    {AGENT_MODE_LIST.map((m) => (
                       <button
                         key={m}
                         type="button"
-                        className="cursor-model-item capitalize"
+                        className={`cursor-model-item agent-mode-item ${agentMode === m ? 'agent-mode-item--active' : ''}`}
                         onClick={() => { setAgentMode(m); setShowModeMenu(false); }}
                       >
-                        {m}
+                        <span className="agent-mode-item-label">{AGENT_MODE_CONFIG[m].label}</span>
+                        <span className="agent-mode-item-desc">{AGENT_MODE_CONFIG[m].description}</span>
                       </button>
                     ))}
                   </div>

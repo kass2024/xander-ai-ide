@@ -6,14 +6,23 @@ import { useActionStore } from '../stores/actionStore';
 import { buildActionFromToolCall } from './actionEngine';
 import { useAgentStateStore, phaseFromTool } from '../stores/agentStateStore';
 import { useTaskStore } from '../stores/taskStore';
-import { analyzeProject, formatAnalysisForAgent } from './projectAnalyzer';
+import { getCachedProjectSummary, peekProjectSummary } from './projectAnalysisCache';
 import { clearBackups } from './patchUtils';
 import type { AgentMode } from '../stores/agentStateStore';
+import {
+  AGENT_MODE_CONFIG,
+  isToolAllowedInMode,
+  maxStepsForAgentMode,
+  normalizeAgentMode,
+} from '../../../shared/agentModes';
+import { maskSecrets } from './secretMasking';
+import { useAgentPlanStore } from '../stores/agentPlanStore';
 import { ensureWorkspace, WorkspaceCancelledError } from './workspaceManager';
 import { useAuthStore } from '../stores/authStore';
-import { useAgentRunStore } from '../stores/agentRunStore';
+import { getRunStoreForSession } from '../stores/agentRunStore';
 import { useAgentPreferencesStore } from '../stores/agentPreferencesStore';
 import { toolTitle, toolStepDetail } from './toolLabels';
+import { enterpriseStatusMessage } from './toolCategories';
 import { isMockMode, mockAgentStream } from './providers';
 import { isUiRelatedTask, CLAUDE_UI_MODEL } from './uiRouting';
 import {
@@ -74,15 +83,7 @@ export interface AgentRunResult {
 }
 
 function maxStepsForMode(mode: AgentMode): number {
-  switch (mode) {
-    case 'deep':
-    case 'refactor':
-      return 50;
-    case 'fast':
-      return 25;
-    default:
-      return 40;
-  }
+  return maxStepsForAgentMode(normalizeAgentMode(mode));
 }
 
 const TOOL_ACTIVITY: Record<string, (args: Record<string, unknown>) => string> = {
@@ -173,7 +174,9 @@ async function requestToolApproval(
   tc: ToolCall,
   projectPath: string | null | undefined,
   stepId: string,
+  sessionId: string,
 ): Promise<boolean> {
+  const runStore = getRunStoreForSession(sessionId);
   const built = buildActionFromToolCall(tc);
   if (!built) return false;
 
@@ -202,7 +205,7 @@ async function requestToolApproval(
 
   let approvalBlockId: string | undefined;
   if (actionId) {
-    approvalBlockId = useAgentRunStore.getState().addApprovalBlock({
+    approvalBlockId = runStore.addApprovalBlock({
       toolName: tc.function.name,
       label: built.label,
       actionId,
@@ -218,28 +221,42 @@ async function requestToolApproval(
               ? 'Permanent file deletion.'
               : 'Review this change before applying.',
     });
-    useAgentRunStore.getState().finishToolStep(stepId, 'awaiting_approval');
+    runStore.finishToolStep(stepId, 'awaiting_approval');
   }
 
   const approved = await approvalPromise;
   if (approvalBlockId) {
-    useAgentRunStore.getState().removeApprovalBlock(approvalBlockId);
+    runStore.removeApprovalBlock(approvalBlockId);
   }
   return approved;
 }
 
-function resolveModelForMode(model: string | undefined, agentMode: AgentMode, prompt?: string, hasImages?: boolean): string | undefined {
+function resolveModelForMode(
+  model: string | undefined,
+  agentMode: AgentMode,
+  prompt?: string,
+  hasImages?: boolean,
+): string | undefined {
   if (model && model !== 'auto') return model;
   if (hasImages || (prompt && isUiRelatedTask(prompt))) return CLAUDE_UI_MODEL;
-  switch (agentMode) {
-    case 'fast':
-      return 'gemini-2.5-flash';
-    case 'deep':
-      return 'claude-sonnet-4-20250514';
-    case 'refactor':
-      return 'claude-sonnet-4-20250514';
-    default:
-      return undefined;
+
+  const prefs = useAgentPreferencesStore.getState();
+  if (prefs.selectedProvider !== 'auto') {
+    switch (prefs.selectedProvider) {
+      case 'claude': return 'claude-sonnet-4-20250514';
+      case 'gemini': return 'gemini-2.5-flash';
+      case 'openai': return 'gpt-4o';
+      default: break;
+    }
+  }
+
+  const mode = normalizeAgentMode(agentMode);
+  const pref = AGENT_MODE_CONFIG[mode].preferredProvider;
+  switch (pref) {
+    case 'anthropic': return 'claude-sonnet-4-20250514';
+    case 'google': return 'gemini-2.5-flash';
+    case 'openai': return 'gpt-4o';
+    default: return undefined;
   }
 }
 
@@ -248,6 +265,7 @@ export async function runAgent(options: {
   context: WorkspaceContext;
   model?: string;
   agentMode?: AgentMode;
+  sessionId?: string;
   conversationId?: string;
   images?: Array<{ mediaType: string; data: string }>;
   onProgress?: (progress: AgentProgress) => void;
@@ -255,6 +273,8 @@ export async function runAgent(options: {
   onRefreshGit?: () => void;
   onRefreshExplorer?: () => void;
 }): Promise<AgentRunResult> {
+  const sessionId = options.sessionId || '_default';
+  const runStore = getRunStoreForSession(sessionId);
   const {
     prompt,
     images,
@@ -324,20 +344,19 @@ export async function runAgent(options: {
   let activeProvider: string | undefined;
   let screenshotAnalysisFromScan: string | undefined;
 
-  // Enrich context with project analysis on first run
-  let projectSummary = context.projectSummary;
+  // Use cached project summary — avoid re-scanning on every message
+  let projectSummary = context.projectSummary || peekProjectSummary(repositoryPath || '');
   if (!projectSummary && repositoryPath) {
-    try {
-      const analysis = await analyzeProject(repositoryPath);
-      projectSummary = formatAnalysisForAgent(analysis);
-      const cardId = addTaskCard('Analyzing project', 'running');
-      useTaskStore.getState().updateCard(taskId, cardId, { status: 'success', detail: `${analysis.fileCount} files` });
-    } catch { /* optional */ }
+    projectSummary = await getCachedProjectSummary(repositoryPath);
+    if (projectSummary) {
+      context = { ...context, projectSummary };
+    }
   }
 
   if (images?.length) {
     stateStore.setPhase('analyzing');
-    onProgress?.({ type: 'activity', message: 'Scanning attached screenshot...' });
+    onProgress?.({ type: 'activity', message: 'Scanning attached screenshot…' });
+    onProgress?.({ type: 'phase', phase: 'analyzing' });
     try {
       const scan = await apiClient.aiAnalyzeScreenshot({ images, prompt });
       if (scan.analysis) {
@@ -346,8 +365,9 @@ export async function runAgent(options: {
       }
     } catch { /* vision in step */ }
   } else {
-    onProgress?.({ type: 'activity', message: 'Planning task...' });
-    onProgress?.({ type: 'thinking', message: 'Planning task...' });
+    stateStore.setPhase('planning');
+    onProgress?.({ type: 'phase', phase: 'planning' });
+    onProgress?.({ type: 'thinking', message: 'Connecting to AI agent…' });
   }
 
   if (mockMode) {
@@ -355,6 +375,7 @@ export async function runAgent(options: {
       prompt: userPrompt,
       repositoryPath: repositoryPath!,
       messages,
+      sessionId,
       onProgress,
       onFileChanged,
       onRefreshGit,
@@ -399,6 +420,9 @@ export async function runAgent(options: {
 
     if (step.finishReason === 'stop') {
       finalContent = step.message.content || 'Task completed.';
+      if (normalizeAgentMode(agentMode) === 'plan' && finalContent) {
+        useAgentPlanStore.getState().parseFromMarkdown(finalContent);
+      }
       stateStore.setPhase('completed');
       useTaskStore.getState().completeTask(taskId, 'completed');
       onProgress?.({ type: 'content', content: finalContent });
@@ -429,10 +453,24 @@ export async function runAgent(options: {
         stateStore.setPhase(phase);
         onProgress?.({ type: 'phase', phase });
 
-        const activityMsg = TOOL_ACTIVITY[toolName]?.(args) || `${toolName}...`;
+        const activityMsg = enterpriseStatusMessage(toolName, args);
         const stepLabel = toolTitle(toolName);
         const stepDetail = toolStepDetail(toolName, args);
-        const stepId = useAgentRunStore.getState().startToolStep(toolName, stepLabel, stepDetail);
+        const stepId = runStore.startToolStep(toolName, stepLabel, stepDetail);
+
+        const taskMode = normalizeAgentMode(agentMode);
+        if (!isToolAllowedInMode(toolName, taskMode)) {
+          const blocked = {
+            tool_call_id: tc.id,
+            content: `Tool "${toolName}" is not allowed in ${taskMode} mode. Switch to Build, Debug, or Database mode.`,
+            success: false,
+          };
+          runStore.finishToolStep(stepId, 'failed', blocked.content);
+          messages.push({ role: 'tool', tool_call_id: blocked.tool_call_id, content: blocked.content });
+          continue;
+        }
+        onProgress?.({ type: 'phase', phase });
+        onProgress?.({ type: 'activity', message: activityMsg, toolName });
         onProgress?.({ type: 'tool_start', toolName, path: filePath, provider: activeProvider, message: activityMsg, stepId });
 
         const cardTitleFn = TOOL_CARD_TITLE[toolName];
@@ -452,7 +490,7 @@ export async function runAgent(options: {
 
         if (await toolNeedsApproval(toolName, tc.function.arguments, repositoryPath)) {
           onProgress?.({ type: 'approval_needed', toolName, message: `Approve: ${stepLabel}` });
-          const approved = await requestToolApproval(tc, repositoryPath, stepId);
+          const approved = await requestToolApproval(tc, repositoryPath, stepId, sessionId);
           if (!approved) {
             result = { tool_call_id: tc.id, content: 'User skipped this action.', success: false };
           } else {
@@ -464,17 +502,19 @@ export async function runAgent(options: {
           result = await executeToolCall(tc, repositoryPath);
         }
 
+        const safeResultContent = maskSecrets(result.content);
+
         persistToolCall({
           id: tc.id,
           sessionId: options.conversationId || 'local',
           toolName,
           arguments: tc.function.arguments,
-          result: result.content.slice(0, 4000),
+          result: safeResultContent.slice(0, 4000),
           success: result.success,
           createdAt: new Date().toISOString(),
         }).catch(() => {});
 
-        useAgentRunStore.getState().finishToolStep(
+        runStore.finishToolStep(
           stepId,
           result.success ? 'success' : APPROVAL_TOOLS.has(toolName) && !result.success ? 'skipped' : 'failed',
           result.success ? undefined : result.content.slice(0, 200),
@@ -540,7 +580,7 @@ export async function runAgent(options: {
         messages.push({
           role: 'tool',
           tool_call_id: result.tool_call_id,
-          content: result.content,
+          content: safeResultContent,
         });
       }
 
@@ -574,6 +614,7 @@ async function runMockAgent(opts: {
   prompt: string;
   repositoryPath: string;
   messages: AgentMessage[];
+  sessionId: string;
   onProgress?: (progress: AgentProgress) => void;
   onFileChanged?: (path: string) => void;
   onRefreshGit?: () => void;
@@ -581,7 +622,8 @@ async function runMockAgent(opts: {
   taskId: string;
   stateStore: ReturnType<typeof useAgentStateStore.getState>;
 }): Promise<AgentRunResult> {
-  const { prompt, repositoryPath, onProgress, onFileChanged, onRefreshGit, onRefreshExplorer, taskId, stateStore } = opts;
+  const { prompt, repositoryPath, sessionId, onProgress, onFileChanged, onRefreshGit, onRefreshExplorer, taskId, stateStore } = opts;
+  const runStore = getRunStoreForSession(sessionId);
   const toolCallsMade: string[] = [];
   let streamedText = '';
 
@@ -607,18 +649,18 @@ async function runMockAgent(opts: {
         toolCallsMade.push(toolName);
         const stepLabel = toolTitle(toolName);
         const stepDetail = toolStepDetail(toolName, args);
-        const stepId = useAgentRunStore.getState().startToolStep(toolName, stepLabel, stepDetail);
+        const stepId = runStore.startToolStep(toolName, stepLabel, stepDetail);
         onProgress?.({ type: 'tool_start', toolName, stepId, message: `${toolName}...` });
 
         let approved = true;
         if (await toolNeedsApproval(toolName, tc.function.arguments, repositoryPath)) {
           onProgress?.({ type: 'approval_needed', toolName, message: `Approve: ${stepLabel}` });
-          approved = await requestToolApproval(tc, repositoryPath, stepId);
+          approved = await requestToolApproval(tc, repositoryPath, stepId, sessionId);
         }
 
         if (approved) {
           const result = await executeToolCall(tc, repositoryPath);
-          useAgentRunStore.getState().finishToolStep(stepId, result.success ? 'success' : 'failed');
+          runStore.finishToolStep(stepId, result.success ? 'success' : 'failed');
           onProgress?.({ type: 'tool_done', toolName, success: result.success });
           if (event.type === 'tool_request' && result.success) {
             const filePath = (args.path || args.file) as string | undefined;
@@ -642,7 +684,7 @@ async function runMockAgent(opts: {
             }
           }
         } else {
-          useAgentRunStore.getState().finishToolStep(stepId, 'skipped');
+          runStore.finishToolStep(stepId, 'skipped');
         }
         break;
       }
