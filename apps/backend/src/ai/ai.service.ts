@@ -84,6 +84,9 @@ export interface AgentStepRequest {
     projectSummary?: string;
     semanticContext?: string;
     agentMode?: string;
+    forceTools?: boolean;
+    terminalCwd?: string;
+    mentionedFiles?: string;
     images?: Array<{ mediaType: string; data: string; name?: string }>;
     screenshotAnalysis?: string;
   };
